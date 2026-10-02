@@ -528,7 +528,7 @@ function renderKako(){
 /* ===== 音声（読み上げ・声で回答） =====
    kbd  … 読み上げ＋スマホのキーボードの音声入力で回答（claude.ai の中でも使える）
    free … 読み上げ＋マイクで回答（画面に触らずに続ける。マイクが使える場所＝GitHub Pages版で動く） */
-const PAGES_URL="";   // 手放しモード用の公開ページ（GitHub Pages）。公開後に設定する
+const PAGES_URL="https://ohakkome-collab.github.io/fp1/";   // 手放しモード用の公開ページ（GitHub Pages）
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 const canSpeak="speechSynthesis" in window;
 const V_DEF={mode:"off",rate:1.2,head:true};
