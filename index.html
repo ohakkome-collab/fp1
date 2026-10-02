@@ -123,6 +123,11 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--sheet);border-t
 .segopt:has(input:checked){border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 label.chk{display:flex;gap:8px;align-items:center;font-size:.85rem}
 label.chk input{width:auto;min-height:0}
+.expbox{background:var(--bg);border-radius:8px;padding:12px 14px}
+.expbox p{margin:4px 0 0;line-height:1.8;font-size:.98rem}
+.sibs li small{display:block;color:var(--sub);font-size:.8rem;margin-top:2px}
+.src summary{cursor:pointer;font-size:.78rem;color:var(--sub)}
+.src p{font-size:.75rem;color:var(--sub);line-height:1.6;margin:6px 0 0}
 .confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:.85rem}
 </style>
 
@@ -454,15 +459,14 @@ function renderQuiz(){
   const head=q.h&&!(q.img&&IMG[q.img])?`<p class="qhead2">${esc(q.h)}</p>`:"";
   const sibs=q.past?PQ.filter(x=>x.p===q.p):[];
   const exp=q.past?`
+    ${q.e?`<div class="expbox"><div class="label">解説</div><p>${esc(q.e)}</p></div>`:`<div class="expbox"><div class="label">解説</div><p class="muted">この文の解説は準備中です。</p></div>`}
     ${changed(q)?`<div class="lawnote"><strong>法改正で〇×が変わりました（2026年10月1日時点の法律）</strong>${esc(q.law.t)}</div>`:""}
     ${q.law&&q.law.s==="note"?`<div class="lawnote"><strong>法改正メモ</strong>${esc(q.law.t)}</div>`:""}
-    ${q.law&&q.law.s==="ok"?`<p class="note" style="margin:0">✓ 2026年10月1日時点の法律で確認済み。</p>`:""}
-    <details class="sibs"><summary>元の問題（${label(q)}）のほかの文と答え</summary>
-      <ul>${sibs.map(x=>`<li class="${x.id===q.id?"me":""}"><b class="${x.a==="o"?"tok":"tng"}">${x.a==="o"?"〇":"×"}</b><span>${esc(x.s)}</span></li>`).join("")}</ul>
+    <details class="sibs"><summary>同じ問題のほかの文（${label(q)}）</summary>
+      <ul>${sibs.map(x=>`<li class="${x.id===q.id?"me":""}"><b class="${x.a==="o"?"tok":"tng"}">${x.a==="o"?"〇":"×"}</b><span>${esc(x.s)}${x.e&&x.id!==q.id?`<small>${esc(x.e)}</small>`:""}</span></li>`).join("")}</ul>
     </details>
-    <div class="row"><a class="btn grow" href="${siteUrl(q)}" target="_blank" rel="noopener">解説を見る（FP1級ドットコム）↗</a></div>
-    <p class="note" style="margin:0">出典：一般社団法人 金融財政事情研究会 ファイナンシャル・プランニング技能検定 1級学科試験（基礎編）${q.y}年${q.m}月実施 問${q.no}。4つの選択肢を1つずつの〇×問題に作り替え、正誤は同会の模範解答から判定しています。<a href="${officialPdf(q)}" target="_blank" rel="noopener">原本PDF</a></p>`
-    :(q.e?`<p class="exp">${esc(q.e)}</p>`:"");
+    <details class="src"><summary>出典</summary><p>一般社団法人 金融財政事情研究会 ファイナンシャル・プランニング技能検定 1級学科試験（基礎編）${q.y}年${q.m}月実施 問${q.no}。4つの選択肢を1つずつの〇×問題に作り替え、正誤は同会の模範解答から判定。解説はこのアプリのオリジナルです。${q.law&&q.law.s==="ok"?"2026年10月1日時点の法律で答えを確認済み。":""} <a href="${officialPdf(q)}" target="_blank" rel="noopener">原本PDF</a>・<a href="${siteUrl(q)}" target="_blank" rel="noopener">他サイトの解説</a></p></details>`
+    :(q.e?`<div class="expbox"><div class="label">解説</div><p>${esc(q.e)}</p></div>`:"");
   V.innerHTML=`
   <div class="qhead"><span>${esc(s.name)}</span><span>${s.i+1} / ${s.list.length}</span><button class="btn" id="quit" style="min-height:36px;padding:4px 10px;font-size:.8rem">やめる</button></div>
   <div class="progress"><i style="width:${pct}%"></i></div>
@@ -593,7 +597,7 @@ function voiceAfterRender(q,done){
     const isO=q.a==="o";
     let txt=(done.ok?"正解。":"不正解。")+"この文は、"+(isO?"まる":"ばつ")+"です。";
     if(q.past&&changed(q))txt+="法改正で答えが変わった文です。";
-    if(q.e)txt+=q.e;
+    if(q.e)txt+="解説。"+q.e;
     txt+=done.ok?"覚えた？ あやしい？":"";
     speak(txt,()=>{
       if(!vOn||!session||!session.answered)return;
