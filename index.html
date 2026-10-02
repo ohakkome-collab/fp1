@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>FP1級 合格ノート</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Zen+Old+Mincho:wght@700;900&display=swap">
+<style>
+/* Layout: one-column phone app — header strip, scrolling sheet, fixed bottom tab bar. Ledger-paper ground, ink-navy text, hanko-red for mistakes, pine-green for correct. */
+:root{
+  --bg:#f3f4ef; --sheet:#fbfbf8; --ink:#1d2433; --sub:#5d6474; --line:#d9dccf;
+  --accent:#23407a; --accent-soft:#e3e9f5; --ok:#1f7a55; --ok-soft:#e0f1e8;
+  --ng:#b8322a; --ng-soft:#f8e3e0; --warn:#9a6a00; --warn-soft:#fbefd2;
+  --display:"Zen Old Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
+  --body:"BIZ UDPGothic","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12151c; --sheet:#1a1e27; --ink:#e7e9ee; --sub:#9aa1b0; --line:#2c3240;
+  --accent:#8fb0ee; --accent-soft:#223050; --ok:#5ccf9b; --ok-soft:#173528;
+  --ng:#f08a80; --ng-soft:#3d1e1c; --warn:#e7b94f; --warn-soft:#3a2f14; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12151c; --sheet:#1a1e27; --ink:#e7e9ee; --sub:#9aa1b0; --line:#2c3240;
+  --accent:#8fb0ee; --accent-soft:#223050; --ok:#5ccf9b; --ok-soft:#173528;
+  --ng:#f08a80; --ng-soft:#3d1e1c; --warn:#e7b94f; --warn-soft:#3a2f14; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.7;-webkit-tap-highlight-color:transparent}
+.wrap{max-width:640px;margin:0 auto;padding-inline:16px;padding-block:12px 110px}
+header.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-block:8px 4px}
+header.top h1{font-family:var(--display);font-weight:900;font-size:1.35rem;margin:0;letter-spacing:.04em}
+header.top .sync{font-size:.75rem;color:var(--sub)}
+h2{font-family:var(--display);font-size:1.1rem;margin:0;text-wrap:balance}
+.stack{display:flex;flex-direction:column;gap:14px}
+.card{background:var(--sheet);border:1px solid var(--line);border-radius:10px;padding:16px}
+.muted{color:var(--sub);font-size:.85rem}
+.label{font-size:.72rem;letter-spacing:.08em;color:var(--sub);font-weight:700}
+.big{font-family:var(--display);font-size:2.4rem;line-height:1.1;font-variant-numeric:tabular-nums}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.grow{flex:1;min-width:0}
+.btn{appearance:none;border:1px solid var(--line);background:var(--sheet);color:var(--ink);font:inherit;font-weight:700;border-radius:8px;padding:12px 14px;cursor:pointer;text-align:center;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:48px}
+.btn:focus-visible,.tab:focus-visible,.opt:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--sheet)}
+.btn.block{width:100%}
+.btn:disabled{opacity:.45;cursor:default}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.today{display:flex;gap:16px;align-items:center}
+.today .grow p{margin:4px 0 0}
+.chip{display:inline-block;font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--accent-soft);color:var(--accent)}
+.chip.kaisei{background:var(--warn-soft);color:var(--warn)}
+.chip.ng{background:var(--ng-soft);color:var(--ng)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.field{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;padding-block:10px;border-top:1px solid var(--line)}
+.field:first-of-type{border-top:0}
+.field .name{font-weight:700;font-size:.95rem}
+.field .nums{font-size:.8rem;color:var(--sub);font-variant-numeric:tabular-nums}
+.bar{grid-column:1/-1;height:8px;border-radius:4px;background:var(--line);overflow:hidden;display:flex}
+.bar i{display:block;height:100%}
+.bar .m{background:var(--ok)} .bar .l{background:var(--accent);opacity:.55} .bar .w{background:var(--ng)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.75rem;color:var(--sub)}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px;background:var(--c)}
+/* quiz */
+.qhead{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.8rem;color:var(--sub)}
+.progress{height:4px;background:var(--line);border-radius:2px;overflow:hidden}
+.progress i{display:block;height:100%;background:var(--accent);transition:width .25s}
+.qtext{font-size:1.05rem;line-height:1.85;margin:0;white-space:pre-wrap}
+.tf{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tf .btn{font-family:var(--display);font-size:2rem;min-height:84px}
+.opts{display:flex;flex-direction:column;gap:10px}
+.opt{appearance:none;font:inherit;color:var(--ink);text-align:left;background:var(--sheet);border:1px solid var(--line);border-radius:8px;padding:12px 14px;cursor:pointer;display:flex;gap:10px;min-height:48px}
+.opt b{font-family:var(--display);color:var(--accent)}
+.opt.correct{border-color:var(--ok);background:var(--ok-soft)}
+.opt.wrong{border-color:var(--ng);background:var(--ng-soft)}
+.verdict{display:flex;align-items:center;gap:12px}
+.stamp{font-family:var(--display);font-weight:900;font-size:1.6rem;width:56px;height:56px;border-radius:50%;display:grid;place-items:center;border:3px solid currentColor;transform:rotate(-8deg);flex:none}
+.stamp.ok{color:var(--ok)} .stamp.ng{color:var(--ng)}
+@media (prefers-reduced-motion:no-preference){.stamp{animation:press .22s ease-out}}
+@keyframes press{from{transform:scale(1.4) rotate(-8deg);opacity:0}to{transform:scale(1) rotate(-8deg);opacity:1}}
+.exp{border-left:3px solid var(--accent);padding:4px 0 4px 12px;margin:0;white-space:pre-wrap}
+.rate{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+/* forms */
+label.f{display:flex;flex-direction:column;gap:4px;font-size:.8rem;color:var(--sub);font-weight:700}
+input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;min-height:44px;width:100%}
+.form3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.list{display:flex;flex-direction:column}
+.item{display:flex;gap:10px;align-items:flex-start;padding-block:12px;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.item .grow p{margin:2px 0 0;font-size:.9rem}
+.item .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.item .acts .btn{min-height:40px;padding:6px 10px;font-size:.85rem}
+a{color:var(--accent)}
+/* tab bar */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--sheet);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);padding-bottom:env(safe-area-inset-bottom,0px);z-index:5}
+.tab{appearance:none;border:0;background:none;font:inherit;color:var(--sub);font-size:.72rem;font-weight:700;padding:8px 0 10px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer}
+.tab svg{width:22px;height:22px}
+.tab[aria-current="page"]{color:var(--accent)}
+.note{font-size:.78rem;color:var(--sub);line-height:1.6}
+.empty{text-align:center;padding:24px 8px;color:var(--sub)}
+.badge{min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--ng);color:var(--sheet);font-size:.75rem;display:inline-grid;place-items:center;font-variant-numeric:tabular-nums}
+.rate3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.rate3 .btn{padding:10px 6px;font-size:.85rem}
+.exam{display:flex;flex-direction:column;gap:6px;padding-top:10px;border-top:1px solid var(--line)}
+.cells{display:grid;grid-template-columns:repeat(10,1fr);gap:4px}
+.cell{appearance:none;font:inherit;font-size:.7rem;font-variant-numeric:tabular-nums;border:1px solid var(--line);background:var(--bg);color:var(--sub);border-radius:4px;aspect-ratio:1;max-width:100%;padding:0;cursor:pointer;min-width:0}
+.cell.m{background:var(--ok);border-color:var(--ok);color:var(--sheet)}.cell.l{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}.cell.w{background:var(--ng);border-color:var(--ng);color:var(--sheet)}
+.cell.cur{outline:2px solid var(--ink);outline-offset:1px}
+.qimg{display:block;width:100%;max-width:100%;height:auto;border-radius:6px;background:#fff;border:1px solid var(--line)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .qimg{filter:invert(.88) hue-rotate(180deg)}}
+:root[data-theme="dark"] .qimg{filter:invert(.88) hue-rotate(180deg)}
+.lawnote{background:var(--warn-soft);color:var(--ink);border-radius:8px;padding:10px 12px;font-size:.88rem;line-height:1.7}
+.lawnote strong{display:block;color:var(--warn)}
+.qhead2{margin:0;font-size:.85rem;line-height:1.7;color:var(--sub);white-space:pre-wrap}
+.imgbox summary,.sibs summary{cursor:pointer;font-size:.85rem;font-weight:700;color:var(--accent);padding-block:4px}
+.imgbox[open] summary{margin-bottom:6px}
+.sibs ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.sibs li{display:flex;gap:8px;font-size:.88rem;line-height:1.65;padding:6px 8px;border-radius:6px}
+.sibs li.me{background:var(--accent-soft)}
+.sibs b{font-family:var(--display);flex:none}
+.tok{color:var(--ok)} .tng{color:var(--ng)}
+.tf .btn.isans{border-width:3px;border-color:currentColor}
+.vbar{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px dashed var(--line)}
+.vbar .btn{min-height:40px;padding:6px 12px;font-size:.85rem}
+.vmic{color:var(--ng)}
+.seg{display:flex;flex-direction:column;gap:6px}
+.segopt{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer;font-weight:700;font-size:.92rem}
+.segopt input{width:auto;min-height:0;accent-color:var(--accent)}
+.segopt:has(input:checked){border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+label.chk{display:flex;gap:8px;align-items:center;font-size:.85rem}
+label.chk input{width:auto;min-height:0}
+.confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:.85rem}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>FP1級 合格ノート</h1>
+    <span class="sync" id="sync">この端末に保存</span>
+  </header>
+  <main id="view" class="stack" aria-live="polite"></main>
+</div>
+
+<nav class="tabs" aria-label="メニュー">
+  <button class="tab" data-tab="home" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>ホーム</button>
+  <button class="tab" data-tab="study"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h11a3 3 0 0 1 3 3v12H7a3 3 0 0 1-3-3z"/><path d="M8 9h6M8 13h6"/></svg>問題を解く</button>
+  <button class="tab" data-tab="kako"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>試験回別</button>
+  <button class="tab" data-tab="law"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M5 7h14M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z"/></svg>法改正</button>
+</nav>
+
+<script>
+/* ===== 問題データ（すべてオリジナル作成。2027年1月試験＝法令基準日2026年10月1日を想定） ===== */
+const CATS={L:"ライフプランニング",R:"リスク管理",K:"金融資産運用",T:"タックスプランニング",F:"不動産",S:"相続・事業承継"};
+const Q=[
+// ---- ライフ ----
+{id:"L01",c:"L",k:1,q:"2026年度の老齢基礎年金の満額（67歳以下の人）は、847,300円である。",a:"o",e:"2026年度の満額は847,300円（68歳以上は844,900円）。2025年度は831,700円だったので、年度ごとの金額の違いに注意。"},
+{id:"L02",c:"L",k:1,q:"2026年4月以降、在職老齢年金は、総報酬月額相当額と老齢厚生年金の基本月額の合計が51万円を超えると、超えた額の2分の1が支給停止となる。",a:"x",e:"基準額は65万円に引き上げられた（2025年度は51万円）。「超えた額の2分の1が止まる」という仕組みは変わらない。"},
+{id:"L03",c:"L",k:1,q:"離婚時の年金分割の請求期限は、原則として離婚等をした日の翌日から5年以内である。",a:"o",e:"従来の2年以内から5年以内に延長された。"},
+{id:"L04",c:"L",k:1,q:"2026年10月から、1歳未満の子を養育する国民年金第1号被保険者は、届出により国民年金保険料が免除され、その期間は保険料納付済期間として扱われる。",a:"o",e:"育児期間の免除制度の創設。実母は産前産後免除の後から、それ以外の人は出産後から、子が1歳になる月の前月までが対象。年金額は減らない（納付済扱い）。"},
+{id:"L05",c:"L",k:0,q:"1962年4月2日以後生まれの人が老齢基礎年金を繰り上げて受給する場合、減額率は1カ月あたり0.5％である。",a:"x",e:"減額率は1カ月あたり0.4％（60歳0カ月で最大24％減）。0.5％は以前の率。繰下げの増額率は1カ月あたり0.7％で、75歳まで（最大84％増）。"},
+{id:"L06",c:"L",k:1,q:"フラット35の借入額の上限は8,000万円である。",a:"x",e:"上限は1億2,000万円に引き上げられた。また一戸建て等の床面積要件は70㎡以上から50㎡以上に緩和（マンション等は30㎡以上のまま）。"},
+{id:"L07",c:"L",k:1,q:"企業型DCのマッチング拠出では、加入者掛金の額を事業主掛金の額以下としなければならない。",a:"x",e:"この「事業主掛金以下」という制限は撤廃された。拠出限度額の範囲内であれば、加入者掛金が事業主掛金を上回ってもよい。"},
+{id:"L08",c:"L",k:1,q:"出生後休業支援給付金は、一定の要件を満たす育児休業について、28日を限度に休業開始時賃金日額の13％相当額が支給されるもので、育児休業給付金（67％）とあわせると80％となる。",a:"o",e:"2025年4月創設。夫婦それぞれが通算14日以上の育休を取ることなどが要件。手取りでみるとほぼ10割になる。"},
+{id:"L09",c:"L",k:1,q:"育児時短就業給付金は、3歳未満の子を養育するために時短勤務をしている場合に、時短勤務中の賃金の20％を上限に支給される。",a:"x",e:"対象は2歳未満の子。支給額は原則として時短勤務中の賃金の10％。"},
+{id:"L10",c:"L",k:1,q:"自己都合で退職した人に対する基本手当の給付制限期間は、原則として1カ月である。",a:"o",e:"2025年4月から原則2カ月→1カ月に短縮。なお、退職前1年以内に一定の教育訓練を受けた場合などは給付制限なし。"},
+{id:"L11",c:"L",k:1,q:"2025年4月以降に60歳になった人の高年齢雇用継続基本給付金の給付率は、最大で各月の賃金の15％である。",a:"x",e:"最大10％に縮小された（賃金が60歳時点の64％以下に下がった場合）。"},
+{id:"L12",c:"L",k:0,q:"健康保険の傷病手当金は、支給を始めた日から通算して1年6カ月まで支給される。",a:"o",e:"途中で出勤した期間があっても、その分は延長され「通算」1年6カ月になる。支給額は標準報酬日額の3分の2相当。"},
+{id:"L13",c:"L",k:0,q:"出産育児一時金の額は、産科医療補償制度に加入している医療機関で出産した場合、1児につき50万円である。",a:"o",e:"2023年4月から50万円（未加入の医療機関では48万8,000円）。"},
+{id:"L14",c:"L",k:1,q:"労災保険の葬祭料は、33万円に給付基礎日額の30日分を加えた額（その額が給付基礎日額の60日分に満たない場合は60日分）である。",a:"o",e:"定額部分が31万5,000円から33万円に引き上げられた。"},
+{id:"L15",c:"L",k:1,q:"高等学校等就学支援金は、世帯の収入が一定額以下の場合に限り支給される。",a:"x",e:"所得制限が撤廃され、保護者の収入にかかわらず支給されるようになった。"},
+{id:"L16",c:"L",k:0,q:"加給年金額の対象となる配偶者が、厚生年金の被保険者期間20年以上の老齢厚生年金の受給権を有している場合、実際に受給していなくても加給年金額は支給停止となる。",a:"o",e:"2022年4月以降は「受給権があるかどうか」で判断する。"},
+{id:"L17",c:"L",k:1,q:"日本政策金融公庫の教育一般貸付（国の教育ローン）の返済期間は、最長18年である。",a:"x",e:"2025年4月から最長20年に延長された。"},
+{id:"L18",c:"L",k:1,q:"2026年8月から、高額療養費の自己負担限度額が引き上げられるとともに、年間での上限額が新たに設けられた。",a:"o",e:"月ごとの上限に加え、年間の上限が新設された。"},
+{id:"L19",c:"L",k:0,type:"mc",q:"1961年10月生まれの人が、老齢基礎年金を72歳0カ月で繰下げ受給した場合の増額率として、正しいものはどれか。",ch:["42.0％","50.4％","58.8％","84.0％"],a:2,e:"65歳から72歳0カ月までは84カ月。84×0.7％＝58.8％。"},
+// ---- リスク ----
+{id:"R01",c:"R",k:1,q:"2026年分・2027年分の所得税では、23歳未満の扶養親族がいる場合、新契約の一般生命保険料控除の適用限度額が6万円に引き上げられる。",a:"o",e:"通常4万円のところ6万円に（時限措置）。子育て世帯への支援が目的。"},
+{id:"R02",c:"R",k:1,q:"経済価値ベースのソルベンシー比率の導入に伴い、早期是正措置の対象となる基準は「200％未満」とされた。",a:"x",e:"新方式では基準は100％未満。200％未満は従来方式（ソルベンシー・マージン比率）の基準。"},
+{id:"R03",c:"R",k:0,q:"生命保険契約者保護機構による補償は、破綻時点の責任準備金等の90％まで（高予定利率契約を除く）である。",a:"o",e:"「保険金額の90％」ではなく「責任準備金等の90％」である点がひっかけポイント。"},
+{id:"R04",c:"R",k:0,q:"地震保険の保険金額は、主契約である火災保険の保険金額の30％～50％の範囲内で、建物5,000万円、家財1,000万円が上限である。",a:"o",e:"損害区分は全損・大半損・小半損・一部損の4区分で、それぞれ保険金額の100％・60％・30％・5％。"},
+{id:"R05",c:"R",k:0,q:"法人が契約する定期保険で、最高解約返戻率が50％超70％以下の場合、保険期間の前半4割の期間は支払保険料の40％を資産計上し、60％を損金に算入する。",a:"o",e:"70％超85％以下なら60％資産計上・40％損金。85％超は解約返戻率に応じた別の計算。50％以下は全額損金（原則）。"},
+{id:"R06",c:"R",k:0,q:"契約者（保険料負担者）が夫、被保険者が妻、死亡保険金受取人が子である生命保険で、妻が死亡し子が受け取った死亡保険金は、相続税の課税対象となる。",a:"x",e:"契約者・被保険者・受取人がすべて別人なので贈与税の対象。相続税になるのは「契約者＝被保険者」で受取人が別のとき。"},
+{id:"R07",c:"R",k:0,q:"自動車損害賠償責任保険の支払限度額は、被害者1人につき死亡3,000万円、傷害120万円、後遺障害は最高4,000万円である。",a:"o",e:"自賠責は対人賠償のみ。物損は対象外。"},
+{id:"R08",c:"R",k:0,q:"借家人が軽過失により借家を焼失させた場合、失火責任法により、家主に対する損害賠償責任を負わない。",a:"x",e:"家主には「元の状態で返す」約束を果たせない（債務不履行）ため、軽過失でも責任を負う。失火責任法で守られるのは隣家などへの不法行為責任。"},
+{id:"R09",c:"R",k:0,q:"保険契約のクーリング・オフは、契約の申込日または契約申込書面の交付日のいずれか遅い日から8日以内に行う必要があり、書面のほか電磁的記録でも行うことができる。",a:"o",e:"保険期間1年以内の契約や、法人が結ぶ契約、医師の診査を受けた契約などは対象外。"},
+{id:"R10",c:"R",k:0,q:"個人年金保険料控除の適用を受けるためには、年金受取人が契約者またはその配偶者であり、確定年金の場合は年金受取期間が10年以上であることなどの要件を満たす必要がある。",a:"o",e:"ほかに、保険料払込期間10年以上、年金開始が60歳以後などの要件がある。"},
+// ---- 金融 ----
+{id:"K01",c:"K",k:1,q:"TOPIX（東証株価指数）は、東京証券取引所のプライム市場に上場する全銘柄を対象とする指数である。",a:"x",e:"組入れ対象はプライム・スタンダード・グロースの全市場区分に広がった。日経平均株価はプライム市場の225銘柄。"},
+{id:"K02",c:"K",k:1,q:"投資信託協会と日本投資顧問業協会は統合し、資産運用業協会となった。",a:"o",e:"運用業界の自主規制団体が1つにまとまった。"},
+{id:"K03",c:"K",k:0,q:"NISAの成長投資枠の年間投資枠は240万円、つみたて投資枠は120万円であり、非課税保有限度額は合計1,800万円（うち成長投資枠1,200万円）である。",a:"o",e:"非課税期間は無期限。売却すると、その簿価分の枠が翌年以降に復活する。"},
+{id:"K04",c:"K",k:0,q:"外貨預金は、預金保険制度による保護の対象である。",a:"x",e:"外貨預金は対象外。決済用預金（無利息・要求払い・決済サービス）は全額保護、それ以外は元本1,000万円とその利息まで。"},
+{id:"K05",c:"K",k:0,q:"上場株式の配当について確定申告をする場合、所得税と個人住民税とで異なる課税方式を選択することができる。",a:"x",e:"2024年分以後は、所得税で選んだ方式が住民税にも自動的に適用される（一致させる）。"},
+{id:"K06",c:"K",k:0,q:"J-REIT（上場不動産投資信託）から受け取る分配金は、総合課税を選択すれば配当控除の適用を受けることができる。",a:"x",e:"J-REITの分配金は配当控除の対象外。"},
+{id:"K07",c:"K",k:0,q:"米ドルの外貨預金に円を預け入れる際に適用される為替レートは、TTM（仲値）に1円を加えたTTSである。",a:"o",e:"預け入れ（円→外貨）はTTS、払い戻し（外貨→円）はTTB（TTM－1円）。"},
+{id:"K08",c:"K",k:0,q:"シャープレシオは、ポートフォリオの収益率から無リスク資産利子率を差し引いた値を、ポートフォリオの標準偏差で割って求める。",a:"o",e:"リスク1単位あたりの超過リターン。数値が大きいほど効率よく運用できたと判断する。"},
+{id:"K09",c:"K",k:0,q:"金融サービス提供法では、金融商品販売業者等が重要事項の説明義務に違反した場合、元本欠損額が顧客の損害額と推定される。",a:"o",e:"顧客は損害額を自分で証明しなくてよい。断定的判断の提供も禁止されている。"},
+{id:"K10",c:"K",k:0,q:"日本投資者保護基金は、証券会社が破綻し、分別管理の不備などで顧客資産が返還されない場合に、顧客1人あたり1,000万円まで補償する。",a:"o",e:"銀行で購入した投資信託は対象外（銀行は基金の会員ではない）。"},
+{id:"K11",c:"K",k:0,q:"プットオプションの買い手は、原資産価格が下落した場合に利益が得られ、損失はプレミアム（オプション料）に限定される。",a:"o",e:"売り手は利益がプレミアムに限られ、損失は大きくなりうる。"},
+{id:"K12",c:"K",k:0,type:"mc",q:"表面利率1.0％、残存期間5年の固定利付債券を98円で購入した場合の最終利回り（単利・年率）に最も近いものはどれか。",ch:["1.02％","1.22％","1.43％","1.40％"],a:2,e:"{1.0＋(100－98)÷5}÷98×100＝1.4÷98×100≒1.4286％。分母は購入価格。"},
+{id:"K13",c:"K",k:0,type:"mc",q:"当期純利益50億円、自己資本500億円、総資産1,250億円の企業のROE（自己資本利益率）はどれか。",ch:["4％","10％","25％","40％"],a:1,e:"ROE＝当期純利益÷自己資本×100＝50÷500×100＝10％。総資産で割るとROA（4％）。"},
+{id:"K14",c:"K",k:0,q:"特定公社債の利子は、申告分離課税の対象であるが、確定申告不要を選択することもできる。",a:"o",e:"税率は20.315％。申告分離を選べば上場株式等の譲渡損失と損益通算できる。"},
+// ---- タックス ----
+{id:"T01",c:"T",k:1,q:"2026年分の所得税において、合計所得金額2,350万円以下の人に適用される基礎控除の本則の額は62万円である。",a:"o",e:"58万円→62万円に引き上げ。さらに合計所得489万円以下の人は42万円加算で104万円（2026・2027年分）。"},
+{id:"T02",c:"T",k:1,type:"mc",q:"2026年分の所得税で、合計所得金額が500万円の人の基礎控除額はどれか。",ch:["104万円","67万円","62万円","58万円"],a:1,e:"489万円超655万円以下は67万円。489万円以下なら104万円、655万円超2,350万円以下は62万円。"},
+{id:"T03",c:"T",k:1,q:"2026年分の所得税において、配偶者控除・扶養控除の対象となる親族の合計所得金額の要件は、58万円以下である。",a:"x",e:"基礎控除の引上げにあわせて4万円引き上げられ、62万円以下になった。勤労学生控除は89万円以下。"},
+{id:"T04",c:"T",k:1,q:"2026年分・2027年分の給与所得控除の最低保障額は、74万円である。",a:"o",e:"本則が65万円→69万円、さらに2年間の特例で5万円加算され74万円。"},
+{id:"T05",c:"T",k:1,q:"マイカー通勤者の通勤手当の非課税限度額は、片道55km以上の場合の月額38,700円が上限である。",a:"x",e:"距離区分が増え、片道95km以上で月額66,400円が上限になった。"},
+{id:"T06",c:"T",k:1,q:"確定拠出年金の老齢給付金を一時金で受け取った後、9年以内に退職一時金を受け取った場合、勤続期間が重なる部分は退職一時金の退職所得控除の計算から除かれる。",a:"o",e:"従来は4年以内とされていた。受け取る順番によって有利不利が出ないように見直された。"},
+{id:"T07",c:"T",k:0,type:"mc",q:"勤続30年（障害者になったことによる退職ではない）の会社員が退職金2,500万円を受け取った。退職所得の金額はどれか。",ch:["500万円","1,000万円","650万円","1,250万円"],a:0,e:"退職所得控除＝800万円＋70万円×(30年－20年)＝1,500万円。(2,500万円－1,500万円)×1/2＝500万円。"},
+{id:"T08",c:"T",k:1,q:"中小企業者等の少額減価償却資産の特例では、取得価額40万円未満の資産について、取得価額の全額を損金に算入することができる。",a:"o",e:"30万円未満から40万円未満に引き上げ。対象法人は従業員400人以下に変更（従前500人以下）。"},
+{id:"T09",c:"T",k:1,q:"防衛特別法人税は、2026年4月1日以後に開始する事業年度から、基準法人税額から500万円を控除した額に4％の税率を乗じて課される。",a:"o",e:"基礎控除500万円があるため、多くの中小法人は実際には課税されない。"},
+{id:"T09b",c:"T",k:1,q:"住宅ローン控除は、2030年12月31日までに居住した場合に適用でき、控除率は年末残高の1％である。",a:"x",e:"適用期限は2030年末まで延長されたが、控除率は0.7％のまま。"},
+{id:"T10",c:"T",k:0,q:"法人が支出した得意先との飲食費のうち、1人あたり1万円以下のものは、一定の書類を保存すれば交際費等から除かれる。",a:"o",e:"2024年4月以後、5,000円以下から1万円以下に引き上げられた。"},
+{id:"T11",c:"T",k:0,q:"無申告加算税の割合は、納付すべき税額のうち300万円を超える部分について30％である。",a:"o",e:"50万円以下の部分15％、50万円超300万円以下の部分20％、300万円超の部分30％。"},
+{id:"T12",c:"T",k:0,q:"不動産所得の損失の金額のうち、土地を取得するための負債の利子に相当する部分は、他の所得と損益通算することができない。",a:"o",e:"建物部分の利子は通算できる。別荘など生活に通常必要でない資産の貸付による損失も通算不可。"},
+{id:"T13",c:"T",k:0,q:"上場株式等の譲渡損失は、確定申告をすることにより、翌年以後5年間にわたって繰り越すことができる。",a:"x",e:"繰越しは3年間。純損失の繰越し（青色申告）も原則3年間。"},
+{id:"T14",c:"T",k:0,type:"mc",q:"一時払養老保険（契約者・被保険者・受取人が同じ本人）の満期保険金600万円を受け取った。払込保険料は500万円で、ほかに一時所得はない。総所得金額に算入される金額はどれか。",ch:["100万円","50万円","25万円","0円"],a:2,e:"一時所得＝600万円－500万円－特別控除50万円＝50万円。総所得金額にはその2分の1の25万円を算入。"},
+{id:"T15",c:"T",k:0,q:"医療費控除の控除額は、支払った医療費（保険金などで補てんされる額を除く）から、10万円と総所得金額等の5％のいずれか低い額を差し引いた額で、上限は200万円である。",a:"o",e:"セルフメディケーション税制は1万2,000円を超える部分で上限8万8,000円。両方の併用はできない。"},
+{id:"T16",c:"T",k:1,q:"特定親族特別控除は、居住者と生計を一にする19歳以上23歳未満の親族で、一定の所得要件を満たす者がいる場合に適用される。",a:"o",e:"大学生世代の子がアルバイトで特定扶養親族から外れても、所得に応じて段階的に控除を受けられる仕組み（2025年分から）。"},
+// ---- 不動産 ----
+{id:"F01",c:"F",k:1,q:"所有権の登記名義人は、氏名または住所に変更があった日から2年以内に変更登記を申請しなければならず、正当な理由なく怠った場合は5万円以下の過料の対象となる。",a:"o",e:"2026年4月施行。施行前の変更も対象で、原則2028年3月31日までに申請が必要。"},
+{id:"F02",c:"F",k:0,q:"相続により不動産の所有権を取得した相続人は、相続により所有権を取得したことを知った日から3年以内に相続登記を申請しなければならない。",a:"o",e:"2024年4月施行。正当な理由なく怠ると10万円以下の過料。施行前の相続も対象。"},
+{id:"F03",c:"F",k:1,q:"改正区分所有法では、耐震性の不足など一定の客観的事由がある場合、建替え決議に必要な多数決割合が区分所有者および議決権の各4分の3以上に緩和された。",a:"o",e:"原則は各5分の4以上。大規模滅失時の復旧は4分の3→3分の2に緩和。一括売却・取壊し等の新たな再生手法は原則5分の4。"},
+{id:"F04",c:"F",k:1,q:"改正区分所有法では、集会の普通決議は、原則として集会に出席した区分所有者およびその議決権の各過半数で決することができる。",a:"o",e:"「全員の過半数」から「出席者の過半数」になった（出席者多数決）。所在等不明区分所有者を裁判所の決定で母数から除く制度もできた。"},
+{id:"F05",c:"F",k:1,q:"新築住宅に係る固定資産税の減額措置（2分の1に減額）の床面積要件は、原則として50㎡以上280㎡以下である。",a:"x",e:"原則40㎡以上240㎡以下に変更された。不動産取得税の新築住宅の軽減措置も原則40㎡以上240㎡以下。"},
+{id:"F06",c:"F",k:0,q:"事業用定期借地権等の存続期間は10年以上50年未満で、設定契約は公正証書によらなければならない。",a:"o",e:"一般定期借地権は50年以上（書面または電磁的記録）、建物譲渡特約付借地権は30年以上。普通借地権は30年以上。"},
+{id:"F07",c:"F",k:0,q:"定期建物賃貸借契約では、契約期間を1年未満とすることはできない。",a:"x",e:"定期借家は1年未満でも有効。普通借家で1年未満と定めると「期間の定めのない契約」とみなされる。"},
+{id:"F08",c:"F",k:0,type:"mc",q:"敷地面積300㎡、指定建蔽率60％の土地（防火地域内、特定行政庁が指定する角地）に耐火建築物を建てる場合、建築面積の最高限度はどれか。",ch:["180㎡","210㎡","240㎡","300㎡"],a:2,e:"防火地域内の耐火建築物で＋10％、角地で＋10％。60％＋20％＝80％。300㎡×80％＝240㎡。"},
+{id:"F09",c:"F",k:0,q:"宅地建物取引業者が自ら売主となる宅地の売買契約で、買主が宅建業者でない場合、売主は代金の2割を超える手付を受領することができない。",a:"o",e:"手付は解約手付とみなされ、相手方が履行に着手するまでは、買主は手付放棄、売主は倍額を現実に提供して解除できる。"},
+{id:"F10",c:"F",k:0,q:"居住用財産の譲渡について、3,000万円特別控除と、所有期間10年超の居住用財産の軽減税率の特例は、併用することができる。",a:"o",e:"軽減税率は課税長期譲渡所得6,000万円以下の部分が14.21％（所得税・復興税10.21％＋住民税4％）。"},
+{id:"F11",c:"F",k:0,q:"土地・建物の譲渡所得の長期・短期の区分は、譲渡した日において所有期間が5年を超えているかどうかで判定する。",a:"x",e:"譲渡した年の1月1日時点で所有期間が5年を超えているかで判定する。"},
+{id:"F12",c:"F",k:0,q:"被相続人の居住用財産（空き家）に係る譲渡所得の特別控除は、その家屋と敷地を取得した相続人が3人以上である場合、1人あたりの控除額が2,000万円となる。",a:"o",e:"2024年1月以後の譲渡から。2人以下なら3,000万円。譲渡の翌年2月15日までに買主が耐震改修・取壊しをする場合も対象。"},
+{id:"F13",c:"F",k:1,q:"住宅ローン控除において、床面積40㎡以上50㎡未満の住宅も対象とする緩和措置は、新築住宅に限られ、既存住宅には適用されない。",a:"x",e:"改正で既存住宅にも拡大された（合計所得金額1,000万円以下などの要件あり）。"},
+{id:"F14",c:"F",k:0,q:"建築基準法上の道路に該当する幅員4m未満の2項道路に接する敷地では、原則として道路の中心線から2m後退した線が道路の境界線とみなされる。",a:"o",e:"後退部分（セットバック部分）は建蔽率・容積率の計算の敷地面積に含めない。"},
+// ---- 相続 ----
+{id:"S01",c:"S",k:1,q:"直系尊属から教育資金の一括贈与を受けた場合の贈与税の非課税措置は、2026年4月1日以後に締結する教育資金管理契約にも適用される。",a:"x",e:"2026年3月31日で新規の適用は終了。それまでに結んだ契約は、契約終了まで従前の取扱い。"},
+{id:"S02",c:"S",k:1,q:"取引相場のない株式を純資産価額方式で評価する際、評価差額に対する法人税額等に相当する金額は、評価差額に38％を乗じて計算する。",a:"o",e:"防衛特別法人税の創設に伴い37％から38％に変更された。"},
+{id:"S03",c:"S",k:1,q:"法人版事業承継税制の特例措置を受けるための特例承継計画の提出期限は、2026年3月31日である。",a:"x",e:"2027年9月30日まで延長された。特例措置の適用期限（贈与・相続の期限）は2027年12月31日のまま。個人版の計画提出期限は2028年9月30日。"},
+{id:"S04",c:"S",k:0,q:"2024年1月1日以後の暦年課税による贈与について、相続開始前7年以内の贈与は相続税の課税価格に加算されるが、延長された4年間に受けた贈与については合計100万円までは加算されない。",a:"o",e:"3年以内の分は全額加算。7年に完全移行するのは2031年1月以後の相続から。"},
+{id:"S05",c:"S",k:0,q:"相続時精算課税を選択した場合、特定贈与者ごとに年110万円の基礎控除を差し引いた後、累計2,500万円の特別控除を超える部分に20％の税率で贈与税が課される。",a:"o",e:"基礎控除分は相続時に加算されない。暦年課税の110万円とは別枠。"},
+{id:"S06",c:"S",k:0,type:"mc",q:"被相続人の相続人は、配偶者、実子2人、普通養子2人である。相続税の遺産に係る基礎控除額はどれか。",ch:["5,400万円","6,000万円","4,800万円","6,600万円"],a:0,e:"実子がいるので、数に含める養子は1人まで。法定相続人の数＝配偶者1＋実子2＋養子1＝4人。3,000万円＋600万円×4＝5,400万円。"},
+{id:"S07",c:"S",k:0,q:"相続人が受け取った死亡保険金の非課税限度額は「500万円×法定相続人の数」で計算し、この法定相続人の数には相続を放棄した者も含める。",a:"o",e:"ただし、放棄した人が受け取った保険金そのものには非課税枠を使えない。"},
+{id:"S08",c:"S",k:0,q:"配偶者の税額軽減により、配偶者が取得した財産が1億6,000万円または配偶者の法定相続分相当額のいずれか多い金額までであれば、配偶者に相続税はかからない。",a:"o",e:"原則として申告期限までに遺産分割が済んでいる必要があり、0円になる場合も申告書の提出が必要。"},
+{id:"S09",c:"S",k:0,q:"被相続人の養子となっている孫（代襲相続人ではない）が相続により財産を取得した場合、その者の相続税額は2割加算の対象となる。",a:"o",e:"代襲相続人である孫は対象外。兄弟姉妹も2割加算の対象。"},
+{id:"S10",c:"S",k:0,type:"mc",q:"特定居住用宅地等（400㎡、自用地評価額1億円）について小規模宅地等の特例を最大限適用した後の評価額はどれか。",ch:["2,000万円","3,400万円","6,600万円","8,000万円"],a:1,e:"限度面積330㎡まで80％減額。減額＝1億円×330/400×80％＝6,600万円。1億円－6,600万円＝3,400万円。"},
+{id:"S11",c:"S",k:0,q:"小規模宅地等の特例で、特定居住用宅地等と特定事業用宅地等を併用する場合（貸付事業用宅地等はない）、最大730㎡まで適用できる。",a:"o",e:"特定居住用330㎡＋特定事業用400㎡＝730㎡。貸付事業用（200㎡・50％減）を含める場合は調整計算が必要。"},
+{id:"S12",c:"S",k:0,q:"兄弟姉妹が相続人となる場合、兄弟姉妹にも遺留分が認められる。",a:"x",e:"兄弟姉妹には遺留分がない。全体の遺留分は直系尊属のみが相続人の場合3分の1、それ以外は2分の1。"},
+{id:"S13",c:"S",k:0,q:"自筆証書遺言に添付する財産目録は、パソコンで作成することができるが、その目録の各ページに署名・押印が必要である。",a:"o",e:"本文は全文自書が必要。法務局の保管制度を利用した自筆証書遺言は家庭裁判所の検認が不要。"},
+{id:"S14",c:"S",k:0,q:"配偶者短期居住権は、遺産分割により居住建物の帰属が確定した日、または相続開始の時から6カ月を経過する日のいずれか遅い日まで存続する。",a:"o",e:"配偶者居住権（長期）は遺産分割や遺贈で取得し、登記が第三者に対抗する要件。"},
+{id:"S15",c:"S",k:0,q:"贈与税の配偶者控除は、婚姻期間が10年以上の配偶者から居住用不動産等の贈与を受けた場合に、最高2,000万円まで控除できる。",a:"x",e:"婚姻期間は20年以上。基礎控除110万円とあわせて最高2,110万円まで非課税。"},
+{id:"S16",c:"S",k:0,q:"相続税の申告期限は相続の開始を知った日の翌日から10カ月以内、被相続人の所得税の準確定申告の期限は4カ月以内である。",a:"o",e:"相続放棄・限定承認の期限は3カ月以内（家庭裁判所に申述）。限定承認は共同相続人全員で行う。"},
+{id:"S17",c:"S",k:0,q:"直系尊属から住宅取得等資金の贈与を受けた場合の非課税限度額は、省エネ等住宅の場合1,000万円、それ以外の住宅の場合500万円である。",a:"o",e:"2024年1月1日から2026年12月31日までの贈与が対象。受贈者は18歳以上、合計所得2,000万円以下などの要件。"},
+{id:"S18",c:"S",k:1,q:"法人版事業承継税制で贈与により株式を取得する後継者は、贈与の日まで引き続き3年以上役員等であることが要件とされている。",a:"x",e:"この「3年役員要件」は撤廃された（2025年1月以後の贈与）。贈与時に役員等であることは必要。"}
+];
+
+/* ===== 復習スケジュール ===== */
+const STEPS=[1,3,7,14,30,60]; // 箱の段階ごとの次回までの日数
+const fmt=d=>d.toISOString().slice(0,10);
+const today=()=>{const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return fmt(d)};
+const addDays=n=>{const d=new Date(today()+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+n);return fmt(d)};
+const daysBetween=(a,b)=>Math.round((new Date(b+"T00:00:00Z")-new Date(a+"T00:00:00Z"))/864e5);
+
+/* ===== 保存（Claudeのクラウド保存→だめならこの端末） ===== */
+const LS="fp1note.v1";
+let S={cards:{},kako:[],pq:{},pr:"r12",pc:"",exam:"2027-01-24",log:{}};
+let db=null,docRef=null,saveTimer=null,saving=false,pending=false;
+function migrate(){S.cards=S.cards||{};Object.entries(S.pq||{}).forEach(([id,v])=>{if(!S.cards[id])S.cards[id]=v});(S.kako||[]).forEach(k=>{const id=`${k.y}_${k.m}_${String(k.no).padStart(2,"0")}`;if(!S.cards[id])S.cards[id]={b:k.b||0,c:0,w:k.w||1,lr:"x",d:k.d}});S.pq={};S.kako=[]}
+function loadLocal(){try{const r=localStorage.getItem(LS);if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}}
+function saveLocal(){try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
+function setSync(t){document.getElementById("sync").textContent=t}
+function save(){
+  saveLocal();
+  if(!docRef)return;
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(flush,1200);
+}
+async function flush(){
+  if(saving){pending=true;return}
+  saving=true;setSync("保存中…");
+  try{await docRef.set(JSON.parse(JSON.stringify(S)));setSync("クラウドに保存済み")}
+  catch(e){setSync("この端末に保存")}
+  saving=false;
+  if(pending){pending=false;flush()}
+}
+async function initCloud(){
+  try{
+    if(!window.claude||!window.claude.use)return;
+    const [d,u]=await Promise.all([claude.use("db"),claude.use("user")]);
+    if(!d||!u)return;
+    const id=await u.id(); if(!id)return;
+    db=d; docRef=db.doc("data/users/"+id+"/progress");
+    const snap=await docRef.get();
+    if(snap.exists){
+      const remote=snap.data();
+      // 回答数が多い方を採用（端末とクラウドのずれ対策）
+      const cnt=o=>Object.values(o.cards||{}).reduce((s,c)=>s+(c.c||0)+(c.w||0),0)+Object.values(o.pq||{}).reduce((s,c)=>s+(c.c||0)+(c.w||0),0)+(o.kako||[]).length;
+      if(cnt(remote)>=cnt(S)){S=Object.assign({cards:{},kako:[],pq:{},pr:"r12",pc:"",exam:S.exam,log:{}},JSON.parse(JSON.stringify(remote)));migrate();saveLocal()}
+      else flush();
+    }else if(Object.keys(S.cards).length||Object.keys(S.pq).length){flush()}
+    setSync("クラウドに保存済み");
+    render();
+  }catch(e){setSync("この端末に保存")}
+}
+
+/* ===== 公式過去問（金融財政事情研究会 公表の1級学科・基礎編）を1文ずつの〇×問題にしたもの ===== */
+// 学科基礎編の分野の並び（目安）：問1-8 ライフ／9-15 リスク／16-24 金融／25-33 タックス／34-41 不動産／42-50 相続
+const catOf=no=>no<=8?"L":no<=15?"R":no<=24?"K":no<=33?"T":no<=41?"F":"S";
+const EXAMS=[[2026,9],[2026,5],[2026,1],[2025,9],[2025,5],[2025,1],[2024,9],[2024,5],[2024,1],[2023,9],[2023,5],[2023,1],[2022,9],[2022,5],[2022,1]];
+// オリジナルの4択問題も〇×に分ける
+Q.splice(0,Q.length,...Q.flatMap(q=>q.type!=="mc"?[q]:q.ch.map((t,i)=>({id:q.id+"_"+(i+1),c:q.c,k:q.k,h:q.q+"（次の答えは正しいか）",q:"答え："+t,a:i===q.a?"o":"x",e:q.e}))));
+let PQ=[],pqState="loading",IMG={};
+async function loadImgs(){for(const f of ["imgs1.json","imgs2.json","imgs3.json","imgs4.json","imgs5.json","imgs6.json"]){try{const r=await fetch(f);if(r.ok)Object.assign(IMG,await r.json())}catch(e){}}if(session)renderQuiz()}
+async function loadPast(){
+  try{
+    PQ=[];
+    for(const f of ["pasttf1.json","pasttf2.json"]){const r=await fetch(f);if(!r.ok)throw 0;const j=await r.json();PQ.push(...j.items.map(o=>({...o,h:j.h[o.p],q:o.s,c:catOf(o.no),past:true})))}
+    pqState="ok";
+  }catch(e){pqState="error"}
+  if(!session)render();
+  loadImgs();
+}
+const ALL=()=>Q.concat(PQ);
+const changed=q=>q.law&&q.law.s==="changed";
+const subNo=q=>{const t=q.id.split("_").pop();return /[abc]/.test(t)?"("+t+")":"選択肢"+t};
+const label=q=>q.past?`${q.y}年${q.m}月 問${q.no}`:"オリジナル問題";
+const officialPdf=q=>`https://www.kinzai.or.jp/uploads/lib/question/${q.y}${String(q.m).padStart(2,"0")}/fp01_g_kiso.pdf`;
+const siteUrl=q=>`https://fp1-siken.com/kakomon/${q.y}_${q.m}/${String(q.no).padStart(2,"0")}.html`;
+
+/* ===== 集計 ===== */
+const card=id=>S.cards[id];
+const isDue=id=>{const c=card(id);return c&&c.d<=today()};
+function dueQ(){return ALL().filter(q=>isDue(q.id))}
+function statFor(list){
+  let m=0,l=0,w=0;
+  list.forEach(q=>{const c=card(q.id);if(!c)return;if(c.lr==="x")w++;else if(c.b>=3)m++;else l++});
+  return {m,l,w,n:list.length,untouched:list.length-m-l-w};
+}
+function streak(){let n=0;for(let i=0;;i++){const d=addDays(-i);if(S.log[d])n++;else if(i>0)break;else continue;}return n}
+
+/* ===== 画面 ===== */
+const V=document.getElementById("view");
+let tab="home",session=null;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function render(){
+  document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-current",b.dataset.tab===tab?"page":"false"));
+  if(session){renderQuiz();return}
+  ({home:renderHome,study:renderStudy,kako:renderKako,law:renderLaw})[tab]();
+  window.scrollTo(0,0);
+}
+
+function renderHome(){
+  const due=dueQ(),dp=due.filter(q=>q.past).length,dq=due.length-dp,days=daysBetween(today(),S.exam);
+  const A=ALL(),all=statFor(A);
+  const answeredToday=S.log[today()]||0;
+  const nextNew=PQ.filter(q=>!card(q.id));
+  V.innerHTML=`
+  <section class="card today">
+    <div class="grow">
+      <div class="label">今日の復習</div>
+      <div class="big">${due.length}<span style="font-size:1rem"> 問</span></div>
+      <p class="muted">過去問 ${dp}問・オリジナル ${dq}問 ／ 今日解いた数 ${answeredToday}問</p>
+    </div>
+  </section>
+  <button class="btn primary block" id="goDue" ${due.length?"":"disabled"}>${due.length?"復習を始める（"+due.length+"問）":"今日の復習はありません"}</button>
+  ${pqState==="ok"&&nextNew.length?`<button class="btn block" id="goNew">新しい〇×を20問（ランダム）</button>`:""}
+  ${pqState==="loading"?`<p class="note">過去問を読み込んでいます…</p>`:""}
+  ${pqState==="error"?`<p class="note">過去問を読み込めませんでした。通信状態を確かめて、ページを開き直してください。</p>`:""}
+  <section class="card stack">
+    <div class="row">
+      <div class="grow"><div class="label">試験まで</div><div class="big">${days>=0?days:"—"}<span style="font-size:1rem"> 日</span></div></div>
+      <div class="grow"><div class="label">連続学習</div><div class="big">${streak()}<span style="font-size:1rem"> 日</span></div></div>
+    </div>
+    <label class="f">試験日（変更できます）<input type="date" id="examDate" value="${S.exam}"></label>
+  </section>
+  ${voiceSettings()}
+  <section class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:6px"><h2>分野別の仕上がり</h2><span class="muted">${A.length.toLocaleString()}問</span></div>
+    <div class="legend"><span style="--c:var(--ok)">定着</span><span style="--c:var(--accent)">学習中</span><span style="--c:var(--ng)">直前に間違えた</span></div>
+    ${Object.entries(CATS).map(([k,n])=>{const list=A.filter(q=>q.c===k),s=statFor(list),N=s.n||1;return `
+      <div class="field"><span class="name">${n}</span><span class="nums">定着 ${s.m}/${s.n}</span>
+      <div class="bar" role="img" aria-label="${n} 定着${s.m} 学習中${s.l} 間違い${s.w} 未着手${s.untouched}"><i class="m" style="width:${s.m/N*100}%"></i><i class="l" style="width:${s.l/N*100}%"></i><i class="w" style="width:${s.w/N*100}%"></i></div></div>`}).join("")}
+  </section>
+  <p class="note">全体：定着 ${all.m}問・学習中 ${all.l}問・要復習 ${all.w}問・未着手 ${all.untouched}問。過去問は1つの選択肢を1問の〇×にしています。「定着」は3回以上続けて正解し、復習間隔が7日以上になった問題です。</p>`;
+  V.querySelector("#goDue")?.addEventListener("click",()=>start(dueQ(),"今日の復習"));
+  V.querySelector("#goNew")?.addEventListener("click",()=>start(shuffle(nextNew).slice(0,20),"新しい〇×20問"));
+  V.querySelector("#examDate").addEventListener("change",e=>{if(e.target.value){S.exam=e.target.value;save();render()}});
+  voiceSettingsBind();
+}
+
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+
+function renderStudy(){
+  const rng=["r6","r12","all"].includes(S.pr)?S.pr:"r12",n={r6:6,r12:12,all:15}[rng];
+  const inRange=q=>!q.past||EXAMS.slice(0,n).some(([y,m])=>y===q.y&&m===q.m);
+  const pool=ALL().filter(inRange);
+  const P=pool.filter(q=>q.past);
+  const weak=pool.filter(q=>card(q.id)&&card(q.id).w>0);
+  const freshP=P.filter(q=>!card(q.id));
+  V.innerHTML=`
+  <section class="card stack">
+    <div class="row" style="justify-content:space-between"><h2>過去問の〇×</h2><span class="muted">${pqState==="ok"?P.length.toLocaleString()+"問":"読み込み中…"}</span></div>
+    <label class="f">範囲<select id="pr">
+      <option value="r6" ${rng==="r6"?"selected":""}>直近6回（2024年9月〜）</option>
+      <option value="r12" ${rng==="r12"?"selected":""}>直近12回（2023年1月〜）</option>
+      <option value="all" ${rng==="all"?"selected":""}>全15回（2022年1月〜）</option></select></label>
+    <div class="grid2">
+      <button class="btn" data-set="pnew">まだ解いていない<br><span class="muted">20問ずつ・${freshP.length}問</span></button>
+      <button class="btn" data-set="prand">ランダム50問<br><span class="muted">全分野から</span></button>
+      <button class="btn" data-set="calc">計算・資料の問題<br><span class="muted">${P.filter(q=>q.img).length}問</span></button>
+      <button class="btn" data-set="chg">法改正で〇×が変わった<br><span class="muted">${P.filter(changed).length}問</span></button>
+    </div>
+  </section>
+  <section class="card stack">
+    <h2>復習・苦手</h2>
+    <div class="grid2">
+      <button class="btn" data-set="due">今日の復習<br><span class="muted">${dueQ().length}問</span></button>
+      <button class="btn" data-set="weak">間違えたことがある<br><span class="muted">${weak.length}問</span></button>
+    </div>
+  </section>
+  <section class="card stack">
+    <h2>分野を選んで解く（20問ずつ）</h2>
+    <p class="note" style="margin:0">選んだ範囲の過去問とオリジナル問題から、まだ解いていない問題を先に出します。</p>
+    <div class="grid2">${Object.entries(CATS).map(([k,nm])=>`<button class="btn" data-cat="${k}">${nm}<br><span class="muted">${pool.filter(q=>q.c===k).length}問</span></button>`).join("")}</div>
+  </section>
+  <section class="card stack">
+    <h2>オリジナル問題（最新の法改正）</h2>
+    <p class="muted" style="margin:0">2026年の改正点を中心に ${Q.length}問。</p>
+    <div class="grid2">
+      <button class="btn" data-set="law">法改正だけ<br><span class="muted">${Q.filter(q=>q.k).length}問</span></button>
+      <button class="btn" data-set="orig">オリジナル全部<br><span class="muted">${Q.length}問</span></button>
+    </div>
+  </section>`;
+  V.querySelector("#pr").onchange=e=>{S.pr=e.target.value;save();renderStudy()};
+  const freshFirst=l=>{const f=shuffle(l.filter(q=>!card(q.id))),r=shuffle(l.filter(q=>card(q.id)));return f.concat(r).slice(0,20)};
+  const sets={pnew:()=>shuffle(freshP).slice(0,20),prand:()=>shuffle(P).slice(0,50),calc:()=>freshFirst(P.filter(q=>q.img)),chg:()=>P.filter(changed),due:()=>dueQ(),weak:()=>shuffle(weak),law:()=>shuffle(Q.filter(q=>q.k)),orig:()=>shuffle(Q)};
+  const names={pnew:"まだ解いていない問題",prand:"ランダム50問",calc:"計算・資料の問題",chg:"法改正で〇×が変わった問題",due:"今日の復習",weak:"苦手な問題",law:"法改正",orig:"オリジナル問題"};
+  V.querySelectorAll("[data-set]").forEach(b=>b.addEventListener("click",()=>{const l=sets[b.dataset.set]();if(l.length)start(l,names[b.dataset.set])}));
+  V.querySelectorAll("[data-cat]").forEach(b=>b.addEventListener("click",()=>start(freshFirst(pool.filter(q=>q.c===b.dataset.cat)),CATS[b.dataset.cat])));
+}
+
+/* ===== 出題（すべて〇×） ===== */
+function start(list,name){session={list:list.slice(),i:0,name,ok:0,ng:0,answered:null};render()}
+function renderQuiz(){
+  const s=session;
+  if(s.i>=s.list.length){
+    V.innerHTML=`<section class="card stack" style="text-align:center">
+      <div class="label">${esc(s.name)}　おつかれさまでした</div>
+      <div class="big">${s.ok}<span style="font-size:1rem"> / ${s.ok+s.ng} 問正解</span></div>
+      <p class="muted" style="margin:0">${s.ok+s.ng?"正答率 "+Math.round(s.ok/(s.ok+s.ng)*100)+"％。":""}間違えた問題は明日もう一度出題されます。</p>
+    </section>
+    <button class="btn primary block" id="back">ホームに戻る</button>`;
+    V.querySelector("#back").onclick=()=>{session=null;tab="home";render()};
+    if(vOn)speak("おつかれさまでした。"+(s.ok+s.ng)+"問中、"+s.ok+"問正解です。",()=>vStop());
+    return;
+  }
+  const q=s.list[s.i],c=card(q.id),done=s.answered;
+  const pct=s.i/s.list.length*100;
+  const isO=q.a==="o";
+  const lawChip=q.past?(changed(q)?'<span class="chip ng">法改正で〇×が変わった</span>':q.law&&q.law.s==="note"?'<span class="chip kaisei">法改正メモ</span>':""):(q.k?'<span class="chip kaisei">法改正</span>':"");
+  const img=q.img?(IMG[q.img]?`<details class="imgbox" open><summary>問題の資料（問題用紙の画像）を見る</summary><img class="qimg" src="${IMG[q.img]}" alt="問題の資料"><p class="note" style="margin:6px 0 0">画像の中の「次のうち〜はどれか」は、下の文が正しいかどうかに読み替えてください。</p></details>`:`<p class="note">資料の画像を読み込んでいます…</p>`):"";
+  const head=q.h&&!(q.img&&IMG[q.img])?`<p class="qhead2">${esc(q.h)}</p>`:"";
+  const sibs=q.past?PQ.filter(x=>x.p===q.p):[];
+  const exp=q.past?`
+    ${changed(q)?`<div class="lawnote"><strong>法改正で〇×が変わりました（2026年10月1日時点の法律）</strong>${esc(q.law.t)}</div>`:""}
+    ${q.law&&q.law.s==="note"?`<div class="lawnote"><strong>法改正メモ</strong>${esc(q.law.t)}</div>`:""}
+    ${q.law&&q.law.s==="ok"?`<p class="note" style="margin:0">✓ 2026年10月1日時点の法律で確認済み。</p>`:""}
+    <details class="sibs"><summary>元の問題（${label(q)}）のほかの文と答え</summary>
+      <ul>${sibs.map(x=>`<li class="${x.id===q.id?"me":""}"><b class="${x.a==="o"?"tok":"tng"}">${x.a==="o"?"〇":"×"}</b><span>${esc(x.s)}</span></li>`).join("")}</ul>
+    </details>
+    <div class="row"><a class="btn grow" href="${siteUrl(q)}" target="_blank" rel="noopener">解説を見る（FP1級ドットコム）↗</a></div>
+    <p class="note" style="margin:0">出典：一般社団法人 金融財政事情研究会 ファイナンシャル・プランニング技能検定 1級学科試験（基礎編）${q.y}年${q.m}月実施 問${q.no}。4つの選択肢を1つずつの〇×問題に作り替え、正誤は同会の模範解答から判定しています。<a href="${officialPdf(q)}" target="_blank" rel="noopener">原本PDF</a></p>`
+    :(q.e?`<p class="exp">${esc(q.e)}</p>`:"");
+  V.innerHTML=`
+  <div class="qhead"><span>${esc(s.name)}</span><span>${s.i+1} / ${s.list.length}</span><button class="btn" id="quit" style="min-height:36px;padding:4px 10px;font-size:.8rem">やめる</button></div>
+  <div class="progress"><i style="width:${pct}%"></i></div>
+  <section class="card stack">
+    <div class="row" style="gap:6px"><span class="chip">${CATS[q.c]}</span><span class="chip">${label(q)}${q.past?" "+subNo(q):""}</span>${lawChip}${c&&c.w?`<span class="chip ng">過去に${c.w}回ミス</span>`:""}</div>
+    ${head}${img}
+    <p class="qtext">${esc(q.q)}</p>
+    <div class="tf"><button class="btn ${done&&isO?"isans":""}" data-pick="o" ${done?"disabled":""} aria-label="正しい（まる）" style="color:var(--ok)">〇</button><button class="btn ${done&&!isO?"isans":""}" data-pick="x" ${done?"disabled":""} aria-label="誤り（ばつ）" style="color:var(--ng)">×</button></div>
+    ${voiceBar(done)}
+  </section>
+  ${done?`<section class="card stack">
+    <div class="verdict"><div class="stamp ${done.ok?"ok":"ng"}">${done.ok?"正":"誤"}</div><div><strong>${done.ok?"正解":"不正解"}</strong><div class="muted">この文は ${isO?"〇（正しい）":"×（誤り）"}</div></div></div>
+    ${exp}
+    ${done.ok?`<div class="label">自信はどのくらい？（次に出る日が変わります）</div>
+      <div class="rate"><button class="btn" data-rate="unsure">あやしい<br><span class="muted">${STEPS[0]}日後</span></button><button class="btn primary" data-rate="sure">覚えた<br><span class="muted" style="color:inherit;opacity:.8">${STEPS[Math.min(((c&&c.b)||0)+1,STEPS.length-1)]}日後</span></button></div>`
+    :`<button class="btn primary block" data-rate="wrong">次へ（明日もう一度出ます）</button>`}
+  </section>`:""}`;
+  V.querySelector("#quit").onclick=()=>{vStop();session=null;render()};
+  V.querySelectorAll("[data-pick]").forEach(b=>b.addEventListener("click",()=>answer(q,b.dataset.pick)));
+  V.querySelectorAll("[data-rate]").forEach(b=>b.addEventListener("click",()=>rate(q,b.dataset.rate)));
+  if(done)V.querySelector(".verdict").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion:reduce)").matches?"auto":"smooth",block:"start"});
+  voiceBind(q);voiceAfterRender(q,done);
+}
+function answer(q,pick){
+  const ok=pick===q.a;
+  session.answered={ok,pick};
+  if(ok)session.ok++;else session.ng++;
+  S.log[today()]=(S.log[today()]||0)+1;
+  renderQuiz();
+}
+function rate(q,how){
+  const c=S.cards[q.id]||{b:0,c:0,w:0};
+  if(how==="wrong"){c.b=0;c.w++;c.lr="x";c.d=addDays(STEPS[0])}
+  else if(how==="unsure"){c.c++;c.lr="o";c.b=1;c.d=addDays(STEPS[0])}
+  else{c.c++;c.lr="o";c.b=Math.min(c.b+1,STEPS.length-1);c.d=addDays(STEPS[c.b])}
+  c.t=today();S.cards[q.id]=c;save();
+  session.i++;session.answered=null;renderQuiz();window.scrollTo(0,0);
+}
+
+/* ===== 試験回ごとの記録 ===== */
+function renderKako(){
+  if(pqState!=="ok"){V.innerHTML=`<section class="card empty">${pqState==="loading"?"過去問を読み込んでいます…":"過去問を読み込めませんでした。ページを開き直してください。"}</section>`;return}
+  const cell=(y,m,no)=>{const st=statFor(PQ.filter(q=>q.y===y&&q.m===m&&q.no===no));const cls=st.untouched===st.n?"":st.w?"w":st.m===st.n?"m":"l";return `<button class="cell ${cls}" data-cell="${y}-${m}-${no}" aria-label="${y}年${m}月 問${no}">${no}</button>`};
+  V.innerHTML=`
+  <section class="card stack">
+    <h2>試験回ごとに解く</h2>
+    <p class="note" style="margin:0">1問（4つの文）ずつ〇×で解きます。番号をタップすると、その問題の文だけを解けます。マスの色は、その問題の文の出来ぐあいです。</p>
+    <div class="legend"><span style="--c:var(--ok)">全部定着</span><span style="--c:var(--accent)">学習中</span><span style="--c:var(--ng)">間違えた文あり</span><span style="--c:var(--line)">未着手</span></div>
+  </section>
+  ${EXAMS.map(([y,m])=>{const qs=PQ.filter(q=>q.y===y&&q.m===m),st=statFor(qs),done=qs.length-st.untouched,law=qs.filter(changed).length;return `
+  <section class="card stack exam">
+    <div class="row" style="justify-content:space-between"><strong>${y}年${m}月</strong><span class="muted">解いた ${done}/${qs.length}文${law?`・〇×が変わった ${law}`:""}</span></div>
+    <div class="cells">${Array.from({length:50},(_,i)=>cell(y,m,i+1)).join("")}</div>
+    <div class="row"><button class="btn grow" data-exam="${y}-${m}">問1から順に解く</button><button class="btn grow" data-examrest="${y}-${m}" ${done===qs.length?"disabled":""}>未着手だけ</button></div>
+  </section>`}).join("")}
+  <p class="note">試験問題の出典：一般社団法人 金融財政事情研究会「ファイナンシャル・プランニング技能検定 1級学科試験（基礎編）」。同会の「技能検定試験問題の使用について」に従い、4つの選択肢を1つずつの〇×問題に作り替えて掲載しています。</p>`;
+  const get=v=>{const [y,m]=v.split("-").map(Number);return PQ.filter(q=>q.y===y&&q.m===m)};
+  V.querySelectorAll("[data-exam]").forEach(b=>b.onclick=()=>start(get(b.dataset.exam),b.dataset.exam.replace("-","年")+"月"));
+  V.querySelectorAll("[data-examrest]").forEach(b=>b.onclick=()=>{const l=get(b.dataset.examrest).filter(q=>!card(q.id));if(l.length)start(l,b.dataset.examrest.replace("-","年")+"月 未着手")});
+  V.querySelectorAll("[data-cell]").forEach(b=>b.onclick=()=>{const [y,m,no]=b.dataset.cell.split("-").map(Number);start(PQ.filter(q=>q.y===y&&q.m===m&&q.no===no),`${y}年${m}月 問${no}`)});
+}
+
+/* ===== 音声（読み上げ・声で回答） =====
+   kbd  … 読み上げ＋スマホのキーボードの音声入力で回答（claude.ai の中でも使える）
+   free … 読み上げ＋マイクで回答（画面に触らずに続ける。マイクが使える場所＝GitHub Pages版で動く） */
+const PAGES_URL="";   // 手放しモード用の公開ページ（GitHub Pages）。公開後に設定する
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+const canSpeak="speechSynthesis" in window;
+const V_DEF={mode:"off",rate:1.2,head:true};
+const vset=()=>Object.assign({},V_DEF,S.voice||{});
+let vOn=false,vRec=null,vBusy=false,vMicBlocked=false;
+function vClean(t){
+  return String(t).replace(/〇|○/g,"まる").replace(/×/g,"ばつ").replace(/答え：/,"答えは、")
+    .replace(/（＝保険料負担者）/g,"").replace(/㎡/g,"平方メートル").replace(/～|〜/g,"から")
+    .replace(/[（(]以下、「[^」]+」という[)）]/g,"").replace(/\s+/g," ");
+}
+function speak(text,cb){
+  if(!canSpeak){cb&&cb();return}
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(vClean(text));
+  u.lang="ja-JP";u.rate=vset().rate;
+  const ja=speechSynthesis.getVoices().find(v=>/^ja/i.test(v.lang));if(ja)u.voice=ja;
+  let done=false;const fin=()=>{if(done)return;done=true;cb&&cb()};
+  u.onend=fin;u.onerror=fin;
+  speechSynthesis.speak(u);
+}
+function vStop(){
+  vOn=false;vBusy=false;
+  try{canSpeak&&speechSynthesis.cancel()}catch(e){}
+  try{vRec&&vRec.abort()}catch(e){}
+  vRec=null;
+}
+// 聞き取った言葉を判定
+function vParse(t){
+  t=String(t).replace(/\s/g,"");
+  if(/あやし|怪し|アヤシ|微妙|自信ない/.test(t))return"unsure";
+  if(/覚えた|おぼえた|オボエタ|覚えてる|ばっちり|自信ある/.test(t))return"sure";
+  if(/^(次|つぎ|ツギ|すすむ|進む|ok|OK|オッケー|おっけー)/.test(t))return"next";
+  if(/やめ|ストップ|終わり|おわり/.test(t))return"stop";
+  if(/ばつ|バツ|罰|×|✕|ペケ|ぺけ|間違|まちがい|誤り|あやまり|いいえ|不適切|ダメ|だめ/.test(t))return"x";
+  if(/まる|マル|丸|〇|○|正しい|ただしい|はい|適切|オー|OK/.test(t))return"o";
+  return null;
+}
+function vListen(onWord,onNone){
+  if(!SR||vMicBlocked){onNone&&onNone("nomic");return}
+  try{vRec&&vRec.abort()}catch(e){}
+  const r=new SR();vRec=r;
+  r.lang="ja-JP";r.interimResults=false;r.maxAlternatives=5;r.continuous=false;
+  let got=false;
+  r.onresult=e=>{const alts=[...e.results[0]].map(a=>a.transcript);for(const a of alts){const w=vParse(a);if(w){got=true;onWord(w,a);return}}};
+  r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"||e.error==="audio-capture"){vMicBlocked=true;got=true;onNone&&onNone("nomic")}};
+  r.onend=()=>{if(vRec===r)vRec=null;if(!got&&vOn)onNone&&onNone("none")};
+  try{r.start()}catch(e){onNone&&onNone("nomic")}
+}
+function vStatus(t){const el=document.getElementById("vstat");if(el)el.textContent=t}
+// 問題の画面が表示されるたびに呼ばれる
+function voiceAfterRender(q,done){
+  const v=vset();if(v.mode==="off"||!vOn||!session)return;
+  const kbd=document.getElementById("vin");
+  if(!done){
+    const txt=(v.head&&q.h&&!q.img?q.h+"。":"")+(q.img?"資料つきの問題です。":"")+q.q+"。まる？ ばつ？";
+    speak(txt,()=>{
+      if(!vOn||session?.answered)return;
+      if(v.mode==="free"){vStatus("🎤 聞いています…「まる」か「ばつ」");listenAnswer(q,0)}
+      else{vStatus("キーボードのマイクで「まる」「ばつ」");kbd&&kbd.focus()}
+    });
+  }else{
+    const isO=q.a==="o";
+    let txt=(done.ok?"正解。":"不正解。")+"この文は、"+(isO?"まる":"ばつ")+"です。";
+    if(q.past&&changed(q))txt+="法改正で答えが変わった文です。";
+    if(q.e)txt+=q.e;
+    txt+=done.ok?"覚えた？ あやしい？":"";
+    speak(txt,()=>{
+      if(!vOn||!session||!session.answered)return;
+      if(v.mode==="free"){
+        if(done.ok){vStatus("🎤「覚えた」か「あやしい」");vListen(w=>{if(w==="stop")return vEnd();rate(q,w==="unsure"?"unsure":"sure")},()=>vOn&&session&&session.answered&&rate(q,"sure"))}
+        else rate(q,"wrong");
+      }else{vStatus(done.ok?"「覚えた」か「あやしい」と入力":"「次」と入力すると進みます");kbd&&kbd.focus()}
+    });
+  }
+}
+function listenAnswer(q,tries){
+  vListen(w=>{
+    if(w==="stop")return vEnd();
+    if(w==="o"||w==="x")answer(q,w);
+    else if(tries<2)listenAnswer(q,tries+1);
+  },why=>{
+    if(why==="nomic"){vStatus("このページではマイクが使えません");vMicNote();return}
+    if(!vOn||session?.answered)return;
+    if(tries<2){vStatus("🎤 もう一度どうぞ…");listenAnswer(q,tries+1)}
+    else{vStatus("聞き取れませんでした。ボタンで答えるか「もう一度読む」を押してください")}
+  });
+}
+function vEnd(){vStop();vStatus("音声を止めました");const b=document.getElementById("vgo");if(b)b.textContent="🔊 音声スタート"}
+function vMicNote(){
+  const el=document.getElementById("vmic");if(!el)return;
+  el.hidden=false;
+  el.innerHTML=PAGES_URL?`このページ（claude.ai）ではマイクが使えません。手放しモードは <a href="${PAGES_URL}" target="_blank" rel="noopener">GitHub Pages版</a> で使ってください。今は「キーボードの音声入力」モードに切り替えると、このページでも声で答えられます。`:`このページではマイクが使えません。「キーボードの音声入力」モードに切り替えると、声で答えられます。`;
+}
+// 問題画面の音声パーツ（ボタンと入力欄）
+function voiceBar(done){
+  const v=vset();if(v.mode==="off")return"";
+  return `<div class="vbar">
+    <div class="row" style="gap:8px">
+      <button class="btn" id="vgo">${vOn?"⏹ 音声を止める":"🔊 音声スタート"}</button>
+      <button class="btn" id="vagain">もう一度読む</button>
+    </div>
+    ${v.mode==="kbd"?`<input id="vin" type="text" inputmode="text" autocomplete="off" placeholder="🎤 キーボードのマイクで「まる」「ばつ」" aria-label="声で答える（キーボードの音声入力）">`:""}
+    <p class="note" id="vstat" style="margin:0">${vOn?"":"「音声スタート」を押すと読み上げが始まります"}</p>
+    <p class="note vmic" id="vmic" hidden></p>
+  </div>`;
+}
+function voiceBind(q){
+  const v=vset();if(v.mode==="off")return;
+  const go=document.getElementById("vgo"),again=document.getElementById("vagain"),inp=document.getElementById("vin");
+  go&&go.addEventListener("click",()=>{if(vOn){vEnd()}else{vOn=true;go.textContent="⏹ 音声を止める";voiceAfterRender(q,session&&session.answered)}});
+  again&&again.addEventListener("click",()=>{vOn=true;if(go)go.textContent="⏹ 音声を止める";voiceAfterRender(q,session&&session.answered)});
+  inp&&inp.addEventListener("input",()=>{
+    const w=vParse(inp.value);if(!w)return;
+    inp.value="";
+    if(w==="stop")return vEnd();
+    const done=session&&session.answered;
+    if(!done&&(w==="o"||w==="x"))answer(q,w);
+    else if(done&&done.ok&&(w==="sure"||w==="unsure"))rate(q,w);
+    else if(done&&!done.ok&&(w==="next"||w==="o"||w==="x"))rate(q,"wrong");
+    else if(done&&done.ok&&w==="next")rate(q,"sure");
+  });
+}
+function voiceSettings(){
+  const v=vset();
+  return `<section class="card stack">
+    <h2>音声モード</h2>
+    <div class="seg" role="radiogroup" aria-label="音声モード">
+      ${[["off","オフ"],["kbd","読み上げ＋キーボードの音声入力"],["free","読み上げ＋マイク（手放し）"]].map(([k,t])=>`<label class="segopt"><input type="radio" name="vmode" value="${k}" ${v.mode===k?"checked":""}><span>${t}</span></label>`).join("")}
+    </div>
+    <p class="note" style="margin:0">${v.mode==="kbd"?"問題を読み上げます。答えは、入力欄をタップしてキーボードのマイクボタンで「まる」「ばつ」「覚えた」「あやしい」「次」と話してください。":v.mode==="free"?"問題を読み上げ、マイクで「まる」「ばつ」を聞き取って自動で進みます。正解のあとは「あやしい」と言わなければ「覚えた」として進みます。「やめる」で止まります。claude.aiの中ではマイクが使えないため、GitHub Pages版で使ってください。":"問題の読み上げや、声で答える機能を使うときに切り替えます。"}</p>
+    ${v.mode!=="off"?`<label class="f">読み上げの速さ<select id="vrate">${[[1,"ふつう"],[1.2,"少し速い"],[1.5,"速い"],[1.8,"とても速い"]].map(([r,t])=>`<option value="${r}" ${v.rate==r?"selected":""}>${t}</option>`).join("")}</select></label>
+    <label class="chk"><input type="checkbox" id="vhead" ${v.head?"checked":""}> 問いかけ（〜に関する次の内容は適切か）も読む</label>`:""}
+    ${v.mode==="free"&&!SR?`<p class="note" style="margin:0;color:var(--ng)">このブラウザは音声の聞き取りに対応していません。スマホのSafariかChromeで開いてください。</p>`:""}
+    ${PAGES_URL?`<a class="btn" href="${PAGES_URL}" target="_blank" rel="noopener">手放しモード用（GitHub Pages版）を開く ↗</a>`:""}
+  </section>`;
+}
+function voiceSettingsBind(){
+  V.querySelectorAll('input[name="vmode"]').forEach(r=>r.addEventListener("change",()=>{S.voice=Object.assign(vset(),{mode:r.value});vStop();save();render()}));
+  V.querySelector("#vrate")?.addEventListener("change",e=>{S.voice=Object.assign(vset(),{rate:Number(e.target.value)});save()});
+  V.querySelector("#vhead")?.addEventListener("change",e=>{S.voice=Object.assign(vset(),{head:e.target.checked});save()});
+}
+
+/* ===== 法改正まとめ ===== */
+function renderLaw(){
+  const L=[
+    ["ライフ",["2026年度 老齢基礎年金の満額 847,300円（68歳以上 844,900円）","在職老齢年金の基準額 65万円（2025年度は51万円）","離婚時の年金分割の請求期限 2年→5年","国民年金第1号の育児期間の保険料免除（2026年10月〜、子が1歳まで）","フラット35 上限1億2,000万円・戸建て等の床面積50㎡以上","企業型DCのマッチング拠出「事業主掛金以下」の制限撤廃","労災の葬祭料 33万円＋給付基礎日額30日分","高等学校等就学支援金の所得制限撤廃","高額療養費の限度額引上げ・年間上限の新設（2026年8月）","雇用保険：自己都合の給付制限1カ月／出生後休業支援給付13％／育児時短就業給付10％／高年齢雇用継続給付 最大10％（2025年4月〜）"]],
+    ["リスク",["経済価値ベースの健全性指標の導入、早期是正措置は100％未満","23歳未満の扶養親族がいる場合の一般生命保険料控除 6万円（2026・2027年分）"]],
+    ["金融",["TOPIXの対象が全市場区分（プライム・スタンダード・グロース）に","投資信託協会と日本投資顧問業協会が統合し資産運用業協会に"]],
+    ["タックス",["基礎控除の本則 62万円、合計所得489万円以下は104万円（2026・2027年分）","配偶者控除・扶養控除の所得要件 62万円以下、勤労学生 89万円以下","給与所得控除の最低保障 74万円（本則69万円＋特例5万円）","マイカー通勤手当の非課税上限 月66,400円（片道95km以上）","DC一時金→退職一時金の重複期間の排除 4年以内→9年以内","少額減価償却資産の特例 40万円未満・従業員400人以下","防衛特別法人税 4％（基礎控除500万円、2026年4月以後開始事業年度）","住宅ローン控除 2030年末入居まで延長・控除率0.7％・既存住宅も40㎡に緩和"]],
+    ["不動産",["住所等の変更登記の義務化（2年以内・5万円以下の過料、2026年4月〜）","区分所有法：出席者多数決／建替え 耐震不足等は4分の3／復旧 3分の2／一括売却等 5分の4","新築住宅の不動産取得税・固定資産税の軽減 床面積40㎡以上240㎡以下"]],
+    ["相続",["教育資金一括贈与の非課税は2026年3月31日で新規終了","純資産価額方式の法人税等相当額 37％→38％","特例承継計画の提出期限 2027年9月30日まで延長（適用期限は2027年12月31日）","個人事業承継計画の提出期限 2028年9月30日まで延長","事業承継税制の3年役員要件の撤廃（2025年〜）"]]
+  ];
+  V.innerHTML=`
+  <section class="card stack">
+    <h2>次の試験で狙われやすい改正点</h2>
+    <p class="muted" style="margin:0">2027年1月試験の法令基準日は2026年10月1日（9月試験は同年4月1日）。数字が変わった項目は、古い過去問の答えが今は違うことがあります。</p>
+  </section>
+  ${L.map(([h,items])=>`<section class="card"><h2 style="margin-bottom:6px">${h}</h2><div class="list">${items.map(t=>`<div class="item"><span class="chip kaisei" style="flex:none">改正</span><span class="grow">${esc(t)}</span></div>`).join("")}</div></section>`).join("")}
+  <section class="card stack">
+    <p class="muted" style="margin:0">最新情報の確認はこちら（出典）：</p>
+    <a class="btn" href="https://fp1-siken.com/law.html" target="_blank" rel="noopener">FP1級ドットコム 法令・制度改正情報 ↗</a>
+  </section>`;
+}
+
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{vStop();session=null;tab=b.dataset.tab;render()}));
+document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(g){tab=g.dataset.go;render()}});
+loadLocal();migrate();render();initCloud();loadPast();
+</script>
+
+</body></html>
