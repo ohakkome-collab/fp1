@@ -545,6 +545,7 @@ function vClean(t){
 }
 function speak(text,cb){
   if(!canSpeak){cb&&cb();return}
+  {const r=vRec;vRec=null;try{r&&r.abort()}catch(e){}}  // 読み上げ中は聞き取りを止める（自分の声を拾わないように）
   speechSynthesis.cancel();
   const u=new SpeechSynthesisUtterance(vClean(text));
   u.lang="ja-JP";u.rate=vset().rate;
@@ -578,7 +579,7 @@ function vListen(onWord,onNone){
   let got=false;
   r.onresult=e=>{const alts=[...e.results[0]].map(a=>a.transcript);for(const a of alts){const w=vParse(a);if(w){got=true;onWord(w,a);return}}};
   r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"||e.error==="audio-capture"){vMicBlocked=true;got=true;onNone&&onNone("nomic")}};
-  r.onend=()=>{if(vRec===r)vRec=null;if(!got&&vOn)onNone&&onNone("none")};
+  r.onend=()=>{if(vRec!==r)return;vRec=null;if(!got&&vOn)onNone&&onNone("none")};
   try{r.start()}catch(e){onNone&&onNone("nomic")}
 }
 function vStatus(t){const el=document.getElementById("vstat");if(el)el.textContent=t}
@@ -602,11 +603,24 @@ function voiceAfterRender(q,done){
     speak(txt,()=>{
       if(!vOn||!session||!session.answered)return;
       if(v.mode==="free"){
-        if(done.ok){vStatus("🎤「覚えた」か「あやしい」");vListen(w=>{if(w==="stop")return vEnd();rate(q,w==="unsure"?"unsure":"sure")},()=>vOn&&session&&session.answered&&rate(q,"sure"))}
-        else rate(q,"wrong");
+        vStatus(done.ok?"📖 読み終わったら「覚えた」「あやしい」「次」と言ってください（自動では進みません）":"📖 読み終わったら「次」と言ってください（自動では進みません）");
+        waitNext(q,done);
       }else{vStatus(done.ok?"「覚えた」か「あやしい」と入力":"「次」と入力すると進みます");kbd&&kbd.focus()}
     });
   }
+}
+// 解説のあとは、こちらが合図するまで画面を閉じずに待つ
+function waitNext(q,done){
+  if(!vOn||!session||session.answered!==done)return;
+  vListen(w=>{
+    if(w==="stop")return vEnd();
+    if(done.ok&&(w==="sure"||w==="unsure"||w==="next"))return rate(q,w==="unsure"?"unsure":"sure");
+    if(!done.ok&&(w==="next"||w==="o"||w==="x"))return rate(q,"wrong");
+    waitNext(q,done);
+  },why=>{
+    if(why==="nomic"){vStatus("このページではマイクが使えません");vMicNote();return}
+    waitNext(q,done);
+  });
 }
 function listenAnswer(q,tries){
   vListen(w=>{
@@ -662,7 +676,7 @@ function voiceSettings(){
     <div class="seg" role="radiogroup" aria-label="音声モード">
       ${[["off","オフ"],["kbd","読み上げ＋キーボードの音声入力"],["free","読み上げ＋マイク（手放し）"]].map(([k,t])=>`<label class="segopt"><input type="radio" name="vmode" value="${k}" ${v.mode===k?"checked":""}><span>${t}</span></label>`).join("")}
     </div>
-    <p class="note" style="margin:0">${v.mode==="kbd"?"問題を読み上げます。答えは、入力欄をタップしてキーボードのマイクボタンで「まる」「ばつ」「覚えた」「あやしい」「次」と話してください。":v.mode==="free"?"問題を読み上げ、マイクで「まる」「ばつ」を聞き取って自動で進みます。正解のあとは「あやしい」と言わなければ「覚えた」として進みます。「やめる」で止まります。claude.aiの中ではマイクが使えないため、GitHub Pages版で使ってください。":"問題の読み上げや、声で答える機能を使うときに切り替えます。"}</p>
+    <p class="note" style="margin:0">${v.mode==="kbd"?"問題を読み上げます。答えは、入力欄をタップしてキーボードのマイクボタンで「まる」「ばつ」「覚えた」「あやしい」「次」と話してください。":v.mode==="free"?"問題を読み上げ、マイクで「まる」「ばつ」を聞き取って自動で進みます。解説を読み上げたあとは自動では進まないので、読み終わったら「次」（正解なら「覚えた」「あやしい」でも可）と言ってください。「やめる」で止まります。claude.aiの中ではマイクが使えないため、GitHub Pages版で使ってください。":"問題の読み上げや、声で答える機能を使うときに切り替えます。"}</p>
     ${v.mode!=="off"?`<label class="f">読み上げの速さ<select id="vrate">${[[1,"ふつう"],[1.2,"少し速い"],[1.5,"速い"],[1.8,"とても速い"]].map(([r,t])=>`<option value="${r}" ${v.rate==r?"selected":""}>${t}</option>`).join("")}</select></label>
     <label class="chk"><input type="checkbox" id="vhead" ${v.head?"checked":""}> 問いかけ（〜に関する次の内容は適切か）も読む</label>`:""}
     ${v.mode==="free"&&!SR?`<p class="note" style="margin:0;color:var(--ng)">このブラウザは音声の聞き取りに対応していません。スマホのSafariかChromeで開いてください。</p>`:""}
