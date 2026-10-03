@@ -560,24 +560,34 @@ function vStop(){
   try{vRec&&vRec.abort()}catch(e){}
   vRec=null;
 }
-// 聞き取った言葉を判定
+// 聞き取った言葉を判定（聞き間違いやすい言い方も広く受け付ける）
+const W_O=/正しい|ただしい|タダシイ|正解|せいかい|あってる|合ってる|あっている|合っている|その通り|そのとおり|まる|マル|丸|〇|○|◯|まーる|マール|はい|ハイ|はーい|イエス|いえす|yes|適切|てきせつ|オッケー|おっけー|^ok$|^o$|^オー$|^王$|^円$|^春$|^猿$|^ある$|^まあ$|^まぁ$|^マー$/i;
+const W_X=/違う|ちがう|チガウ|違います|ちがいます|間違|まちが|マチガ|ばつ|バツ|罰|ぺけ|ペケ|×|✕|✖|いいえ|イイエ|いえ$|ノー|^no$|ダメ|だめ|駄目|不適切|ふてきせつ|誤り|あやまり|不正解|^抜|^伐|^ばっ|^バッ|^バス$|^ばす$|^発$|^八$|^パツ$/i;
 function vParse(t){
-  t=String(t).replace(/\s/g,"");
-  if(/あやし|怪し|アヤシ|微妙|自信ない/.test(t))return"unsure";
-  if(/覚えた|おぼえた|オボエタ|覚えてる|ばっちり|自信ある/.test(t))return"sure";
-  if(/^(次|つぎ|ツギ|すすむ|進む|ok|OK|オッケー|おっけー)/.test(t))return"next";
-  if(/やめ|ストップ|終わり|おわり/.test(t))return"stop";
-  if(/ばつ|バツ|罰|×|✕|ペケ|ぺけ|間違|まちがい|誤り|あやまり|いいえ|不適切|ダメ|だめ/.test(t))return"x";
-  if(/まる|マル|丸|〇|○|正しい|ただしい|はい|適切|オー|OK/.test(t))return"o";
+  t=String(t).replace(/[\s。、．,.!！?？]/g,"");
+  if(!t)return null;
+  if(/あやし|怪し|アヤシ|微妙|自信ない|自信がない/.test(t))return"unsure";
+  if(/覚えた|おぼえた|オボエタ|覚えてる|ばっちり|バッチリ|自信ある|余裕/.test(t))return"sure";
+  if(/^(次|つぎ|ツギ|すすむ|進む|進んで|ネクスト|next)/i.test(t))return"next";
+  if(/やめ|ストップ|終わり|おわり|止めて|とめて/.test(t))return"stop";
+  if(W_X.test(t))return"x";      // 「正しくない」などを先に「ばつ」と判定
+  if(/正しくない|ただしくない/.test(t))return"x";
+  if(W_O.test(t))return"o";
   return null;
 }
 function vListen(onWord,onNone){
   if(!SR||vMicBlocked){onNone&&onNone("nomic");return}
-  try{vRec&&vRec.abort()}catch(e){}
+  {const old=vRec;vRec=null;try{old&&old.abort()}catch(e){}}
   const r=new SR();vRec=r;
-  r.lang="ja-JP";r.interimResults=false;r.maxAlternatives=5;r.continuous=false;
+  r.lang="ja-JP";r.interimResults=true;r.maxAlternatives=10;r.continuous=false;
   let got=false;
-  r.onresult=e=>{const alts=[...e.results[0]].map(a=>a.transcript);for(const a of alts){const w=vParse(a);if(w){got=true;onWord(w,a);return}}};
+  r.onresult=e=>{
+    if(got)return;
+    // 途中経過も含めて、すべての候補から最初にわかった言葉を使う
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      for(const a of e.results[i]){const w=vParse(a.transcript);if(w){got=true;try{r.abort()}catch(_){}vRec=null;onWord(w,a.transcript);return}}
+    }
+  };
   r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"||e.error==="audio-capture"){vMicBlocked=true;got=true;onNone&&onNone("nomic")}};
   r.onend=()=>{if(vRec!==r)return;vRec=null;if(!got&&vOn)onNone&&onNone("none")};
   try{r.start()}catch(e){onNone&&onNone("nomic")}
@@ -588,11 +598,11 @@ function voiceAfterRender(q,done){
   const v=vset();if(v.mode==="off"||!vOn||!session)return;
   const kbd=document.getElementById("vin");
   if(!done){
-    const txt=(v.head&&q.h&&!q.img?q.h+"。":"")+(q.img?"資料つきの問題です。":"")+q.q+"。まる？ ばつ？";
+    const txt=(v.head&&q.h&&!q.img?q.h+"。":"")+(q.img?"資料つきの問題です。":"")+q.q+"。正しい？ 違う？";
     speak(txt,()=>{
       if(!vOn||session?.answered)return;
-      if(v.mode==="free"){vStatus("🎤 聞いています…「まる」か「ばつ」");listenAnswer(q,0)}
-      else{vStatus("キーボードのマイクで「まる」「ばつ」");kbd&&kbd.focus()}
+      if(v.mode==="free"){vStatus("🎤 聞いています…「正しい」か「ちがう」（まる・ばつ、はい・いいえでもOK）");listenAnswer(q,0)}
+      else{vStatus("キーボードのマイクで「正しい」か「ちがう」（まる・ばつでもOK）");kbd&&kbd.focus()}
     });
   }else{
     const isO=q.a==="o";
@@ -648,7 +658,7 @@ function voiceBar(done){
       <button class="btn" id="vgo">${vOn?"⏹ 音声を止める":"🔊 音声スタート"}</button>
       <button class="btn" id="vagain">もう一度読む</button>
     </div>
-    ${v.mode==="kbd"?`<input id="vin" type="text" inputmode="text" autocomplete="off" placeholder="🎤 キーボードのマイクで「まる」「ばつ」" aria-label="声で答える（キーボードの音声入力）">`:""}
+    ${v.mode==="kbd"?`<input id="vin" type="text" inputmode="text" autocomplete="off" placeholder="🎤 「正しい」「ちがう」と話す" aria-label="声で答える（キーボードの音声入力）">`:""}
     <p class="note" id="vstat" style="margin:0">${vOn?"":"「音声スタート」を押すと読み上げが始まります"}</p>
     <p class="note vmic" id="vmic" hidden></p>
   </div>`;
@@ -676,7 +686,7 @@ function voiceSettings(){
     <div class="seg" role="radiogroup" aria-label="音声モード">
       ${[["off","オフ"],["kbd","読み上げ＋キーボードの音声入力"],["free","読み上げ＋マイク（手放し）"]].map(([k,t])=>`<label class="segopt"><input type="radio" name="vmode" value="${k}" ${v.mode===k?"checked":""}><span>${t}</span></label>`).join("")}
     </div>
-    <p class="note" style="margin:0">${v.mode==="kbd"?"問題を読み上げます。答えは、入力欄をタップしてキーボードのマイクボタンで「まる」「ばつ」「覚えた」「あやしい」「次」と話してください。":v.mode==="free"?"問題を読み上げ、マイクで「まる」「ばつ」を聞き取って自動で進みます。解説を読み上げたあとは自動では進まないので、読み終わったら「次」（正解なら「覚えた」「あやしい」でも可）と言ってください。「やめる」で止まります。claude.aiの中ではマイクが使えないため、GitHub Pages版で使ってください。":"問題の読み上げや、声で答える機能を使うときに切り替えます。"}</p>
+    <p class="note" style="margin:0">${v.mode==="kbd"?"問題を読み上げます。答えは、入力欄をタップしてキーボードのマイクボタンで「正しい」「ちがう」（まる・ばつ、はい・いいえでもOK）「覚えた」「あやしい」「次」と話してください。":v.mode==="free"?"問題を読み上げ、マイクで「正しい」「ちがう」（まる・ばつ、はい・いいえでもOK）を聞き取って自動で進みます。解説を読み上げたあとは自動では進まないので、読み終わったら「次」（正解なら「覚えた」「あやしい」でも可）と言ってください。「やめる」で止まります。claude.aiの中ではマイクが使えないため、GitHub Pages版で使ってください。":"問題の読み上げや、声で答える機能を使うときに切り替えます。"}</p>
     ${v.mode!=="off"?`<label class="f">読み上げの速さ<select id="vrate">${[[1,"ふつう"],[1.2,"少し速い"],[1.5,"速い"],[1.8,"とても速い"]].map(([r,t])=>`<option value="${r}" ${v.rate==r?"selected":""}>${t}</option>`).join("")}</select></label>
     <label class="chk"><input type="checkbox" id="vhead" ${v.head?"checked":""}> 問いかけ（〜に関する次の内容は適切か）も読む</label>`:""}
     ${v.mode==="free"&&!SR?`<p class="note" style="margin:0;color:var(--ng)">このブラウザは音声の聞き取りに対応していません。スマホのSafariかChromeで開いてください。</p>`:""}
