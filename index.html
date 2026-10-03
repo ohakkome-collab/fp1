@@ -579,7 +579,7 @@ function vListen(onWord,onNone){
   if(!SR||vMicBlocked){onNone&&onNone("nomic");return}
   {const old=vRec;vRec=null;try{old&&old.abort()}catch(e){}}
   const r=new SR();vRec=r;
-  r.lang="ja-JP";r.interimResults=true;r.maxAlternatives=10;r.continuous=false;
+  r.lang="ja-JP";r.interimResults=true;r.maxAlternatives=10;r.continuous=true;   // 黙っていてもすぐ切れないように続けて聞く
   let got=false;
   r.onresult=e=>{
     if(got)return;
@@ -603,7 +603,7 @@ function voiceAfterRender(q,done){
       :(v.head&&q.h?q.h+"。":"")+q.q+"。正しい？ 違う？";
     speak(txt,()=>{
       if(!vOn||session?.answered)return;
-      if(v.mode==="free"){vStatus("🎤 聞いています…「正しい」か「ちがう」（まる・ばつ、はい・いいえでもOK）");listenAnswer(q,0)}
+      if(v.mode==="free"){vStatus("🎤 聞いています（ゆっくり考えてOK）…「正しい」か「ちがう」（まる・ばつ、はい・いいえでもOK）");listenAnswer(q)}
       else{vStatus("キーボードのマイクで「正しい」か「ちがう」（まる・ばつでもOK）");kbd&&kbd.focus()}
     });
   }else{
@@ -622,28 +622,33 @@ function voiceAfterRender(q,done){
   }
 }
 // 解説のあとは、こちらが合図するまで画面を閉じずに待つ
-function waitNext(q,done){
+function waitNext(q,done,until){
+  if(!until)until=Date.now()+V_WAIT*2;
   if(!vOn||!session||session.answered!==done)return;
+  if(Date.now()>until){vStatus("⏸ 聞き取りを休みました。「もう一度読む」で再開できます");return}
   vListen(w=>{
     if(w==="stop")return vEnd();
     if(done.ok&&(w==="sure"||w==="unsure"||w==="next"))return rate(q,w==="unsure"?"unsure":"sure");
     if(!done.ok&&(w==="next"||w==="o"||w==="x"))return rate(q,"wrong");
-    waitNext(q,done);
+    waitNext(q,done,until);
   },why=>{
     if(why==="nomic"){vStatus("このページではマイクが使えません");vMicNote();return}
-    waitNext(q,done);
+    setTimeout(()=>waitNext(q,done,until),300);
   });
 }
-function listenAnswer(q,tries){
+// 答えを待つ：黙って考えていても、最長5分は聞き取りを続ける
+const V_WAIT=5*60*1000;
+function listenAnswer(q,until){
+  if(!until)until=Date.now()+V_WAIT;
+  if(!vOn||!session||session.answered)return;
+  if(Date.now()>until){vStatus("⏸ 長く答えがなかったので聞き取りを休みました。「もう一度読む」で再開できます");return}
   vListen(w=>{
     if(w==="stop")return vEnd();
-    if(w==="o"||w==="x")answer(q,w);
-    else if(tries<2)listenAnswer(q,tries+1);
+    if(w==="o"||w==="x")return answer(q,w);
+    listenAnswer(q,until);
   },why=>{
     if(why==="nomic"){vStatus("このページではマイクが使えません");vMicNote();return}
-    if(!vOn||session?.answered)return;
-    if(tries<2){vStatus("🎤 もう一度どうぞ…");listenAnswer(q,tries+1)}
-    else{vStatus("聞き取れませんでした。ボタンで答えるか「もう一度読む」を押してください")}
+    setTimeout(()=>listenAnswer(q,until),300);   // 切れたら少し待って聞き直す
   });
 }
 function vEnd(){vStop();vStatus("音声を止めました");const b=document.getElementById("vgo");if(b)b.textContent="🔊 音声スタート"}
