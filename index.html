@@ -598,7 +598,9 @@ function voiceAfterRender(q,done){
   const v=vset();if(v.mode==="off"||!vOn||!session)return;
   const kbd=document.getElementById("vin");
   if(!done){
-    const txt=(v.head&&q.h&&!q.img?q.h+"。":"")+(q.img?"資料つきの問題です。":"")+q.q+"。正しい？ 違う？";
+    const txt=q.img
+      ?"資料つきの問題です。"+(q.vh||q.h||"")+"では、次の文は正しいか。"+q.q+"。正しい？ 違う？"
+      :(v.head&&q.h?q.h+"。":"")+q.q+"。正しい？ 違う？";
     speak(txt,()=>{
       if(!vOn||session?.answered)return;
       if(v.mode==="free"){vStatus("🎤 聞いています…「正しい」か「ちがう」（まる・ばつ、はい・いいえでもOK）");listenAnswer(q,0)}
