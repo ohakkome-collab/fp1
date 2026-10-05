@@ -114,6 +114,16 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--sheet);border-t
 .sibs b{font-family:var(--display);flex:none}
 .tok{color:var(--ok)} .tng{color:var(--ng)}
 .tf .btn.isans{border-width:3px;border-color:currentColor}
+.unk{font-size:.95rem;min-height:48px;color:var(--sub)}
+.unk.mine{border-width:3px;border-color:var(--sub)}
+.stamp.uk{color:var(--sub)}
+.calc summary{cursor:pointer;font-size:.9rem;font-weight:700;color:var(--accent);padding-block:4px}
+.calc .disp{border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;margin-block:6px}
+.calc .ex{font-size:.95rem;color:var(--sub);min-height:1.4em;word-break:break-all}
+.calc .res{font-size:1.5rem;font-weight:700;min-height:1.4em;word-break:break-all}
+.calc .keys{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.calc .keys .btn{min-height:46px;font-size:1.1rem;padding:4px}
+.calc .keys .op{color:var(--accent)}
 .vbar{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px dashed var(--line)}
 .vbar .btn{min-height:40px;padding:6px 12px;font-size:.85rem}
 .vmic{color:var(--ng)}
@@ -474,11 +484,13 @@ function renderQuiz(){
     <div class="row" style="gap:6px"><span class="chip">${CATS[q.c]}</span><span class="chip">${label(q)}${q.past?" "+subNo(q):""}</span>${lawChip}${c&&c.w?`<span class="chip ng">過去に${c.w}回ミス</span>`:""}</div>
     ${head}${img}
     <p class="qtext">${esc(q.q)}</p>
+    ${isCalcQ(q)?calcHTML(q):""}
     <div class="tf"><button class="btn ${done&&isO?"isans":""}" data-pick="o" ${done?"disabled":""} aria-label="正しい（まる）" style="color:var(--ok)">〇</button><button class="btn ${done&&!isO?"isans":""}" data-pick="x" ${done?"disabled":""} aria-label="誤り（ばつ）" style="color:var(--ng)">×</button></div>
+    <button class="btn block unk ${done&&done.pick==="u"?"mine":""}" data-pick="u" ${done?"disabled":""}>🤔 わからない（答えと解説を見る）</button>
     ${voiceBar(done)}
   </section>
   ${done?`<section class="card stack">
-    <div class="verdict"><div class="stamp ${done.ok?"ok":"ng"}">${done.ok?"正":"誤"}</div><div><strong>${done.ok?"正解":"不正解"}</strong><div class="muted">この文は ${isO?"〇（正しい）":"×（誤り）"}</div></div></div>
+    <div class="verdict"><div class="stamp ${done.ok?"ok":done.pick==="u"?"uk":"ng"}">${done.ok?"正":done.pick==="u"?"？":"誤"}</div><div><strong>${done.ok?"正解":done.pick==="u"?"わからない":"不正解"}</strong><div class="muted">この文は ${isO?"〇（正しい）":"×（誤り）"}</div></div></div>
     ${exp}
     ${done.ok?`<div class="label">自信はどのくらい？（次に出る日が変わります）</div>
       <div class="rate"><button class="btn" data-rate="unsure">あやしい<br><span class="muted">${STEPS[0]}日後</span></button><button class="btn primary" data-rate="sure">覚えた<br><span class="muted" style="color:inherit;opacity:.8">${STEPS[Math.min(((c&&c.b)||0)+1,STEPS.length-1)]}日後</span></button></div>`
@@ -488,10 +500,48 @@ function renderQuiz(){
   V.querySelectorAll("[data-pick]").forEach(b=>b.addEventListener("click",()=>answer(q,b.dataset.pick)));
   V.querySelectorAll("[data-rate]").forEach(b=>b.addEventListener("click",()=>rate(q,b.dataset.rate)));
   if(done)V.querySelector(".verdict").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion:reduce)").matches?"auto":"smooth",block:"start"});
-  voiceBind(q);voiceAfterRender(q,done);
+  calcBind(q);voiceBind(q);voiceAfterRender(q,done);
+}
+/* ===== 電卓（計算問題のとき表示） ===== */
+const isCalcQ=q=>!!q.img||/^答え：/.test(q.q||"");
+let CALC={id:null,ex:"",open:false};
+const calcShow=t=>t.replace(/\*/g,"×").replace(/\//g,"÷").replace(/-/g,"−");
+function calcEval(src){
+  let i=0;const s=src;
+  const num=()=>{const m=/^\d*\.?\d+|^\d+\./.exec(s.slice(i));if(!m)throw 0;i+=m[0].length;return parseFloat(m[0])};
+  const prim=()=>{if(s[i]==="("){i++;const v=expr();if(s[i]===")")i++;return v}return num()};
+  const unary=()=>{if(s[i]==="-"){i++;return -unary()}if(s[i]==="√"){i++;const v=unary();if(v<0)throw 0;return Math.sqrt(v)}let v=prim();while(s[i]==="%"){i++;v/=100}return v};
+  const pow=()=>{const b=unary();if(s[i]==="^"){i++;return Math.pow(b,pow())}return b};
+  const term=()=>{let v=pow();while(s[i]==="*"||s[i]==="/"){const o=s[i++];const r=pow();v=o==="*"?v*r:v/r}return v};
+  function expr(){let v=term();while(s[i]==="+"||s[i]==="-"){const o=s[i++];const r=term();v=o==="+"?v+r:v-r}return v}
+  const v=expr();if(i<s.length||!isFinite(v))throw 0;return v;
+}
+function calcFmt(v){const r=Math.round(v*1e8)/1e8;return r.toLocaleString("ja-JP",{maximumFractionDigits:8})}
+function calcHTML(q){
+  if(CALC.id!==q.id){CALC={id:q.id,ex:"",open:CALC.open}}
+  const K=[["C","AC"],["(","("],[")",")"],["⌫","BS"],["√","√"],["^","^"],["%","%"],["÷","/"],["7","7"],["8","8"],["9","9"],["×","*"],["4","4"],["5","5"],["6","6"],["−","-"],["1","1"],["2","2"],["3","3"],["＋","+"],["0","0"],["00","00"],[".","."],["＝","EQ"]];
+  return `<details class="calc" ${CALC.open?"open":""}><summary>🧮 電卓を使う</summary>
+    <div class="disp" aria-live="polite"><div class="ex" id="cex"></div><div class="res" id="cres"></div></div>
+    <div class="keys">${K.map(([t,k])=>`<button class="btn ${/^[\d.]+$/.test(k)?"":"op"} ${k==="EQ"?"primary":""}" data-ck="${k}" aria-label="${t==="^"?"累乗":t==="√"?"ルート":t==="⌫"?"1文字消す":t==="C"?"クリア":t}">${t}</button>`).join("")}</div>
+    <p class="note" style="margin:6px 0 0">√ はルート、^ は累乗（例：1.03^5）、% は100分の1。式の途中でも答えが表示されます。</p></details>`;
+}
+function calcBind(q){
+  const box=V.querySelector(".calc");if(!box)return;
+  const ex=box.querySelector("#cex"),res=box.querySelector("#cres");
+  const show=()=>{ex.textContent=calcShow(CALC.ex)||"0";let r="";if(CALC.ex){try{r="＝ "+calcFmt(calcEval(CALC.ex))}catch(e){r=""}}res.textContent=r};
+  box.addEventListener("toggle",()=>{CALC.open=box.open});
+  box.querySelectorAll("[data-ck]").forEach(b=>b.addEventListener("click",()=>{
+    const k=b.dataset.ck;
+    if(k==="AC")CALC.ex="";
+    else if(k==="BS")CALC.ex=CALC.ex.slice(0,-1);
+    else if(k==="EQ"){try{CALC.ex=String(Math.round(calcEval(CALC.ex)*1e10)/1e10)}catch(e){res.textContent="式を確認してください";return}}
+    else CALC.ex+=k;
+    show();
+  }));
+  show();
 }
 function answer(q,pick){
-  const ok=pick===q.a;
+  const ok=pick===q.a;   // pick==="u"（わからない）は不正解あつかい
   session.answered={ok,pick};
   if(ok)session.ok++;else session.ng++;
   S.log[today()]=(S.log[today()]||0)+1;
@@ -566,6 +616,8 @@ const W_X=/違う|ちがう|チガウ|違います|ちがいます|間違|まち
 function vParse(t){
   t=String(t).replace(/[\s。、．,.!！?？]/g,"");
   if(!t)return null;
+  if(/もう一度|もういちど|もう一回|もう1回|もういっかい|もっかい|もう1度|繰り返|くりかえ|リピート|聞き直|ききなお|読み直|よみなお/.test(t))return"repeat";
+  if(/わからない|分からない|判らない|わかんない|分かんない|わかりません|分かりません|知らない|しらない|パス|ギブアップ|降参|こうさん/.test(t))return"unknown";
   if(/あやし|怪し|アヤシ|微妙|自信ない|自信がない/.test(t))return"unsure";
   if(/覚えた|おぼえた|オボエタ|覚えてる|ばっちり|バッチリ|自信ある|余裕/.test(t))return"sure";
   if(/^(次|つぎ|ツギ|すすむ|進む|進んで|ネクスト|next)/i.test(t))return"next";
@@ -603,19 +655,19 @@ function voiceAfterRender(q,done){
       :(v.head&&q.h?q.h+"。":"")+q.q+"。正しい？ 違う？";
     speak(txt,()=>{
       if(!vOn||session?.answered)return;
-      if(v.mode==="free"){vStatus("🎤 聞いています（ゆっくり考えてOK）…「正しい」か「ちがう」（まる・ばつ、はい・いいえでもOK）");listenAnswer(q)}
+      if(v.mode==="free"){vStatus("🎤 聞いています（ゆっくり考えてOK）…「正しい」「ちがう」「わからない」／「もう一度」で読み直し");listenAnswer(q)}
       else{vStatus("キーボードのマイクで「正しい」か「ちがう」（まる・ばつでもOK）");kbd&&kbd.focus()}
     });
   }else{
     const isO=q.a==="o";
-    let txt=(done.ok?"正解。":"不正解。")+"この文は、"+(isO?"まる":"ばつ")+"です。";
+    let txt=(done.ok?"正解。":done.pick==="u"?"わからない、ですね。":"不正解。")+"この文は、"+(isO?"まる":"ばつ")+"です。";
     if(q.past&&changed(q))txt+="法改正で答えが変わった文です。";
     if(q.e)txt+="解説。"+q.e;
     txt+=done.ok?"覚えた？ あやしい？":"";
     speak(txt,()=>{
       if(!vOn||!session||!session.answered)return;
       if(v.mode==="free"){
-        vStatus(done.ok?"📖 読み終わったら「覚えた」「あやしい」「次」と言ってください（自動では進みません）":"📖 読み終わったら「次」と言ってください（自動では進みません）");
+        vStatus(done.ok?"📖 読み終わったら「覚えた」「あやしい」「次」と言ってください（「もう一度」で読み直し）":"📖 読み終わったら「次」と言ってください（「もう一度」で読み直し）");
         waitNext(q,done);
       }else{vStatus(done.ok?"「覚えた」か「あやしい」と入力":"「次」と入力すると進みます");kbd&&kbd.focus()}
     });
@@ -628,6 +680,7 @@ function waitNext(q,done,until){
   if(Date.now()>until){vStatus("⏸ 聞き取りを休みました。「もう一度読む」で再開できます");return}
   vListen(w=>{
     if(w==="stop")return vEnd();
+    if(w==="repeat")return voiceAfterRender(q,done);
     if(done.ok&&(w==="sure"||w==="unsure"||w==="next"))return rate(q,w==="unsure"?"unsure":"sure");
     if(!done.ok&&(w==="next"||w==="o"||w==="x"))return rate(q,"wrong");
     waitNext(q,done,until);
@@ -645,6 +698,8 @@ function listenAnswer(q,until){
   vListen(w=>{
     if(w==="stop")return vEnd();
     if(w==="o"||w==="x")return answer(q,w);
+    if(w==="unknown")return answer(q,"u");
+    if(w==="repeat")return voiceAfterRender(q,null);
     listenAnswer(q,until);
   },why=>{
     if(why==="nomic"){vStatus("このページではマイクが使えません");vMicNote();return}
@@ -680,7 +735,9 @@ function voiceBind(q){
     inp.value="";
     if(w==="stop")return vEnd();
     const done=session&&session.answered;
+    if(w==="repeat")return voiceAfterRender(q,done);
     if(!done&&(w==="o"||w==="x"))answer(q,w);
+    else if(!done&&w==="unknown")answer(q,"u");
     else if(done&&done.ok&&(w==="sure"||w==="unsure"))rate(q,w);
     else if(done&&!done.ok&&(w==="next"||w==="o"||w==="x"))rate(q,"wrong");
     else if(done&&done.ok&&w==="next")rate(q,"sure");
@@ -693,7 +750,7 @@ function voiceSettings(){
     <div class="seg" role="radiogroup" aria-label="音声モード">
       ${[["off","オフ"],["kbd","読み上げ＋キーボードの音声入力"],["free","読み上げ＋マイク（手放し）"]].map(([k,t])=>`<label class="segopt"><input type="radio" name="vmode" value="${k}" ${v.mode===k?"checked":""}><span>${t}</span></label>`).join("")}
     </div>
-    <p class="note" style="margin:0">${v.mode==="kbd"?"問題を読み上げます。答えは、入力欄をタップしてキーボードのマイクボタンで「正しい」「ちがう」（まる・ばつ、はい・いいえでもOK）「覚えた」「あやしい」「次」と話してください。":v.mode==="free"?"問題を読み上げ、マイクで「正しい」「ちがう」（まる・ばつ、はい・いいえでもOK）を聞き取って自動で進みます。解説を読み上げたあとは自動では進まないので、読み終わったら「次」（正解なら「覚えた」「あやしい」でも可）と言ってください。「やめる」で止まります。claude.aiの中ではマイクが使えないため、GitHub Pages版で使ってください。":"問題の読み上げや、声で答える機能を使うときに切り替えます。"}</p>
+    <p class="note" style="margin:0">${v.mode==="kbd"?"問題を読み上げます。答えは、入力欄をタップしてキーボードのマイクボタンで「正しい」「ちがう」（まる・ばつ、はい・いいえでもOK）「わからない」「覚えた」「あやしい」「次」と話してください。「もう一度」で読み直します。":v.mode==="free"?"問題を読み上げ、マイクで「正しい」「ちがう」「わからない」（まる・ばつ、はい・いいえでもOK）を聞き取って答えます。「もう一度」と言うと読み直します。解説を読み上げたあとは自動では進まないので、読み終わったら「次」（正解なら「覚えた」「あやしい」でも可）と言ってください。「やめる」で止まります。claude.aiの中ではマイクが使えないため、GitHub Pages版で使ってください。":"問題の読み上げや、声で答える機能を使うときに切り替えます。"}</p>
     ${v.mode!=="off"?`<label class="f">読み上げの速さ<select id="vrate">${[[1,"ふつう"],[1.2,"少し速い"],[1.5,"速い"],[1.8,"とても速い"]].map(([r,t])=>`<option value="${r}" ${v.rate==r?"selected":""}>${t}</option>`).join("")}</select></label>
     <label class="chk"><input type="checkbox" id="vhead" ${v.head?"checked":""}> 問いかけ（〜に関する次の内容は適切か）も読む</label>`:""}
     ${v.mode==="free"&&!SR?`<p class="note" style="margin:0;color:var(--ng)">このブラウザは音声の聞き取りに対応していません。スマホのSafariかChromeで開いてください。</p>`:""}
