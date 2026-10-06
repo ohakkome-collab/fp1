@@ -337,6 +337,9 @@ const siteUrl=q=>`https://fp1-siken.com/kakomon/${q.y}_${q.m}/${String(q.no).pad
 const card=id=>S.cards[id];
 const isDue=id=>{const c=card(id);return c&&c.d<=today()};
 function dueQ(){return ALL().filter(q=>isDue(q.id))}
+// パスした問題（あとで調べて解く）。答えると一覧から外れる
+function passQ(){const P=S.pass||{};return ALL().filter(q=>P[q.id]).sort((a,b)=>P[a.id]<P[b.id]?-1:P[a.id]>P[b.id]?1:0)}
+function doPass(q){S.pass=S.pass||{};S.pass[q.id]=S.pass[q.id]||today();save();session.passed=(session.passed||0)+1;session.i++;session.answered=null;renderQuiz();window.scrollTo(0,0)}
 function statFor(list){
   let m=0,l=0,w=0;
   list.forEach(q=>{const c=card(q.id);if(!c)return;if(c.lr==="x")w++;else if(c.b>=3)m++;else l++});
@@ -370,6 +373,7 @@ function renderHome(){
     </div>
   </section>
   <button class="btn primary block" id="goDue" ${due.length?"":"disabled"}>${due.length?"復習を始める（"+due.length+"問）":"今日の復習はありません"}</button>
+  ${passQ().length?`<button class="btn block" id="goPass">⏭ あとで解く（パスした問題 ${passQ().length}問）</button>`:""}
   ${pqState==="ok"&&nextNew.length?`<button class="btn block" id="goNew">新しい〇×を20問（ランダム）</button>`:""}
   ${pqState==="loading"?`<p class="note">過去問を読み込んでいます…</p>`:""}
   ${pqState==="error"?`<p class="note">過去問を読み込めませんでした。通信状態を確かめて、ページを開き直してください。</p>`:""}
@@ -390,6 +394,7 @@ function renderHome(){
   </section>
   <p class="note">全体：定着 ${all.m}問・学習中 ${all.l}問・要復習 ${all.w}問・未着手 ${all.untouched}問。過去問は1つの選択肢を1問の〇×にしています。「定着」は3回以上続けて正解し、復習間隔が7日以上になった問題です。</p>`;
   V.querySelector("#goDue")?.addEventListener("click",()=>start(dueQ(),"今日の復習"));
+  V.querySelector("#goPass")?.addEventListener("click",()=>start(passQ(),"パスした問題"));
   V.querySelector("#goNew")?.addEventListener("click",()=>start(shuffle(nextNew).slice(0,20),"新しい〇×20問"));
   V.querySelector("#examDate").addEventListener("change",e=>{if(e.target.value){S.exam=e.target.value;save();render()}});
   voiceSettingsBind();
@@ -423,6 +428,7 @@ function renderStudy(){
     <div class="grid2">
       <button class="btn" data-set="due">今日の復習<br><span class="muted">${dueQ().length}問</span></button>
       <button class="btn" data-set="weak">間違えたことがある<br><span class="muted">${weak.length}問</span></button>
+      <button class="btn" data-set="pass">パスした問題<br><span class="muted">${passQ().length}問</span></button>
     </div>
   </section>
   <section class="card stack">
@@ -440,8 +446,8 @@ function renderStudy(){
   </section>`;
   V.querySelector("#pr").onchange=e=>{S.pr=e.target.value;save();renderStudy()};
   const freshFirst=l=>{const f=shuffle(l.filter(q=>!card(q.id))),r=shuffle(l.filter(q=>card(q.id)));return f.concat(r).slice(0,20)};
-  const sets={pnew:()=>shuffle(freshP).slice(0,20),prand:()=>shuffle(P).slice(0,50),calc:()=>freshFirst(P.filter(q=>q.img)),chg:()=>P.filter(changed),due:()=>dueQ(),weak:()=>shuffle(weak),law:()=>shuffle(Q.filter(q=>q.k)),orig:()=>shuffle(Q)};
-  const names={pnew:"まだ解いていない問題",prand:"ランダム50問",calc:"計算・資料の問題",chg:"法改正で〇×が変わった問題",due:"今日の復習",weak:"苦手な問題",law:"法改正",orig:"オリジナル問題"};
+  const sets={pnew:()=>shuffle(freshP).slice(0,20),prand:()=>shuffle(P).slice(0,50),calc:()=>freshFirst(P.filter(q=>q.img)),chg:()=>P.filter(changed),due:()=>dueQ(),weak:()=>shuffle(weak),pass:()=>passQ(),law:()=>shuffle(Q.filter(q=>q.k)),orig:()=>shuffle(Q)};
+  const names={pnew:"まだ解いていない問題",prand:"ランダム50問",calc:"計算・資料の問題",chg:"法改正で〇×が変わった問題",due:"今日の復習",weak:"苦手な問題",pass:"パスした問題",law:"法改正",orig:"オリジナル問題"};
   V.querySelectorAll("[data-set]").forEach(b=>b.addEventListener("click",()=>{const l=sets[b.dataset.set]();if(l.length)start(l,names[b.dataset.set])}));
   V.querySelectorAll("[data-cat]").forEach(b=>b.addEventListener("click",()=>start(freshFirst(pool.filter(q=>q.c===b.dataset.cat)),CATS[b.dataset.cat])));
 }
@@ -454,6 +460,7 @@ function renderQuiz(){
     V.innerHTML=`<section class="card stack" style="text-align:center">
       <div class="label">${esc(s.name)}　おつかれさまでした</div>
       <div class="big">${s.ok}<span style="font-size:1rem"> / ${s.ok+s.ng} 問正解</span></div>
+      ${s.passed?`<p class="muted" style="margin:0">パスした ${s.passed}問は「あとで解く」に入っています。</p>`:""}
       <p class="muted" style="margin:0">${s.ok+s.ng?"正答率 "+Math.round(s.ok/(s.ok+s.ng)*100)+"％。":""}間違えた問題は明日もう一度出題されます。</p>
     </section>
     <button class="btn primary block" id="back">ホームに戻る</button>`;
@@ -487,6 +494,8 @@ function renderQuiz(){
     ${isCalcQ(q)?calcHTML(q):""}
     <div class="tf"><button class="btn ${done&&isO?"isans":""}" data-pick="o" ${done?"disabled":""} aria-label="正しい（まる）" style="color:var(--ok)">〇</button><button class="btn ${done&&!isO?"isans":""}" data-pick="x" ${done?"disabled":""} aria-label="誤り（ばつ）" style="color:var(--ng)">×</button></div>
     <button class="btn block unk ${done&&done.pick==="u"?"mine":""}" data-pick="u" ${done?"disabled":""}>🤔 わからない（答えと解説を見る）</button>
+    ${done?"":`<button class="btn block unk" id="passBtn">⏭ パス（答えを見ずに、あとで解く）</button>`}
+    ${S.pass&&S.pass[q.id]&&!done?`<p class="note" style="margin:0">パス中の問題です（${S.pass[q.id]}にパス）。答えると「パスした問題」から外れます。</p>`:""}
     ${voiceBar(done)}
   </section>
   ${done?`<section class="card stack">
@@ -498,6 +507,7 @@ function renderQuiz(){
   </section>`:""}`;
   V.querySelector("#quit").onclick=()=>{vStop();session=null;render()};
   V.querySelectorAll("[data-pick]").forEach(b=>b.addEventListener("click",()=>answer(q,b.dataset.pick)));
+  V.querySelector("#passBtn")?.addEventListener("click",()=>doPass(q));
   V.querySelectorAll("[data-rate]").forEach(b=>b.addEventListener("click",()=>rate(q,b.dataset.rate)));
   if(done)V.querySelector(".verdict").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion:reduce)").matches?"auto":"smooth",block:"start"});
   calcBind(q);voiceBind(q);voiceAfterRender(q,done);
@@ -543,6 +553,7 @@ function calcBind(q){
 function answer(q,pick){
   const ok=pick===q.a;   // pick==="u"（わからない）は不正解あつかい
   session.answered={ok,pick};
+  if(S.pass&&S.pass[q.id])delete S.pass[q.id];
   if(ok)session.ok++;else session.ng++;
   S.log[today()]=(S.log[today()]||0)+1;
   renderQuiz();
@@ -612,12 +623,13 @@ function vStop(){
 }
 // 聞き取った言葉を判定（聞き間違いやすい言い方も広く受け付ける）
 const W_O=/正しい|ただしい|タダシイ|正解|せいかい|あってる|合ってる|あっている|合っている|その通り|そのとおり|まる|マル|丸|〇|○|◯|まーる|マール|はい|ハイ|はーい|イエス|いえす|yes|適切|てきせつ|オッケー|おっけー|^ok$|^o$|^オー$|^王$|^円$|^春$|^猿$|^ある$|^まあ$|^まぁ$|^マー$/i;
-const W_X=/違う|ちがう|チガウ|違います|ちがいます|間違|まちが|マチガ|ばつ|バツ|罰|ぺけ|ペケ|×|✕|✖|いいえ|イイエ|いえ$|ノー|^no$|ダメ|だめ|駄目|不適切|ふてきせつ|誤り|あやまり|不正解|^抜|^伐|^ばっ|^バッ|^バス$|^ばす$|^発$|^八$|^パツ$/i;
+const W_X=/違う|ちがう|チガウ|違います|ちがいます|間違|まちが|マチガ|ばつ|バツ|罰|ぺけ|ペケ|×|✕|✖|いいえ|イイエ|いえ$|ノー|^no$|ダメ|だめ|駄目|不適切|ふてきせつ|誤り|あやまり|不正解|^抜|^伐|^ばっ|^バッ|^発$|^八$|^パツ$/i;
 function vParse(t){
   t=String(t).replace(/[\s。、．,.!！?？]/g,"");
   if(!t)return null;
   if(/もう一度|もういちど|もう一回|もう1回|もういっかい|もっかい|もう1度|繰り返|くりかえ|リピート|聞き直|ききなお|読み直|よみなお/.test(t))return"repeat";
-  if(/わからない|分からない|判らない|わかんない|分かんない|わかりません|分かりません|知らない|しらない|パス|ギブアップ|降参|こうさん/.test(t))return"unknown";
+  if(/パス|ぱす|スキップ|あとで|後で|後回し|あとまわし/.test(t))return"pass";
+  if(/わからない|分からない|判らない|わかんない|分かんない|わかりません|分かりません|知らない|しらない|ギブアップ|降参|こうさん/.test(t))return"unknown";
   if(/あやし|怪し|アヤシ|微妙|自信ない|自信がない/.test(t))return"unsure";
   if(/覚えた|おぼえた|オボエタ|覚えてる|ばっちり|バッチリ|自信ある|余裕/.test(t))return"sure";
   if(/^(次|つぎ|ツギ|すすむ|進む|進んで|ネクスト|next)/i.test(t))return"next";
@@ -655,7 +667,7 @@ function voiceAfterRender(q,done){
       :(v.head&&q.h?q.h+"。":"")+q.q+"。正しい？ 違う？";
     speak(txt,()=>{
       if(!vOn||session?.answered)return;
-      if(v.mode==="free"){vStatus("🎤 聞いています（ゆっくり考えてOK）…「正しい」「ちがう」「わからない」／「もう一度」で読み直し");listenAnswer(q)}
+      if(v.mode==="free"){vStatus("🎤 聞いています（ゆっくり考えてOK）…「正しい」「ちがう」「わからない」「パス」／「もう一度」で読み直し");listenAnswer(q)}
       else{vStatus("キーボードのマイクで「正しい」か「ちがう」（まる・ばつでもOK）");kbd&&kbd.focus()}
     });
   }else{
@@ -699,6 +711,7 @@ function listenAnswer(q,until){
     if(w==="stop")return vEnd();
     if(w==="o"||w==="x")return answer(q,w);
     if(w==="unknown")return answer(q,"u");
+    if(w==="pass")return doPass(q);
     if(w==="repeat")return voiceAfterRender(q,null);
     listenAnswer(q,until);
   },why=>{
@@ -738,6 +751,7 @@ function voiceBind(q){
     if(w==="repeat")return voiceAfterRender(q,done);
     if(!done&&(w==="o"||w==="x"))answer(q,w);
     else if(!done&&w==="unknown")answer(q,"u");
+    else if(!done&&w==="pass")doPass(q);
     else if(done&&done.ok&&(w==="sure"||w==="unsure"))rate(q,w);
     else if(done&&!done.ok&&(w==="next"||w==="o"||w==="x"))rate(q,"wrong");
     else if(done&&done.ok&&w==="next")rate(q,"sure");
@@ -750,7 +764,7 @@ function voiceSettings(){
     <div class="seg" role="radiogroup" aria-label="音声モード">
       ${[["off","オフ"],["kbd","読み上げ＋キーボードの音声入力"],["free","読み上げ＋マイク（手放し）"]].map(([k,t])=>`<label class="segopt"><input type="radio" name="vmode" value="${k}" ${v.mode===k?"checked":""}><span>${t}</span></label>`).join("")}
     </div>
-    <p class="note" style="margin:0">${v.mode==="kbd"?"問題を読み上げます。答えは、入力欄をタップしてキーボードのマイクボタンで「正しい」「ちがう」（まる・ばつ、はい・いいえでもOK）「わからない」「覚えた」「あやしい」「次」と話してください。「もう一度」で読み直します。":v.mode==="free"?"問題を読み上げ、マイクで「正しい」「ちがう」「わからない」（まる・ばつ、はい・いいえでもOK）を聞き取って答えます。「もう一度」と言うと読み直します。解説を読み上げたあとは自動では進まないので、読み終わったら「次」（正解なら「覚えた」「あやしい」でも可）と言ってください。「やめる」で止まります。claude.aiの中ではマイクが使えないため、GitHub Pages版で使ってください。":"問題の読み上げや、声で答える機能を使うときに切り替えます。"}</p>
+    <p class="note" style="margin:0">${v.mode==="kbd"?"問題を読み上げます。答えは、入力欄をタップしてキーボードのマイクボタンで「正しい」「ちがう」（まる・ばつ、はい・いいえでもOK）「わからない」「パス」「覚えた」「あやしい」「次」と話してください。「もう一度」で読み直します。":v.mode==="free"?"問題を読み上げ、マイクで「正しい」「ちがう」「わからない」「パス」（まる・ばつ、はい・いいえでもOK）を聞き取って答えます。「もう一度」と言うと読み直します。解説を読み上げたあとは自動では進まないので、読み終わったら「次」（正解なら「覚えた」「あやしい」でも可）と言ってください。「やめる」で止まります。claude.aiの中ではマイクが使えないため、GitHub Pages版で使ってください。":"問題の読み上げや、声で答える機能を使うときに切り替えます。"}</p>
     ${v.mode!=="off"?`<label class="f">読み上げの速さ<select id="vrate">${[[1,"ふつう"],[1.2,"少し速い"],[1.5,"速い"],[1.8,"とても速い"]].map(([r,t])=>`<option value="${r}" ${v.rate==r?"selected":""}>${t}</option>`).join("")}</select></label>
     <label class="chk"><input type="checkbox" id="vhead" ${v.head?"checked":""}> 問いかけ（〜に関する次の内容は適切か）も読む</label>`:""}
     ${v.mode==="free"&&!SR?`<p class="note" style="margin:0;color:var(--ng)">このブラウザは音声の聞き取りに対応していません。スマホのSafariかChromeで開いてください。</p>`:""}
