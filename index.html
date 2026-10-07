@@ -132,6 +132,10 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--sheet);border-t
 .tspk{float:right;min-height:32px;padding:2px 8px;margin:0 0 4px 6px;font-size:.9rem}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chipbtn{min-height:40px;font-size:.85rem;padding:4px 10px}
+.tact{margin-top:6px}.tsave{min-height:34px;font-size:.8rem;padding:2px 10px}
+.tnote{margin-top:6px;font-size:.8rem;color:var(--ok)}
+.expbox.mine{border-color:var(--accent)}
+.stuck li{display:flex;justify-content:space-between;gap:8px;padding-block:4px;border-bottom:1px solid var(--line);font-size:.9rem}
 .vbar{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px dashed var(--line)}
 .vbar .btn{min-height:40px;padding:6px 12px;font-size:.85rem}
 .vmic{color:var(--ng)}
@@ -366,10 +370,12 @@ async function loadPast(){
   if(!session)render();
   loadImgs();
 }
-const ALL=()=>Q.concat(PQ);
+// 家庭教師が出した確認問題（復習に入る）
+function tutorQs(){return (S.tq||[]).map(t=>({id:t.id,q:t.s,s:t.s,a:t.a,e:t.e,c:t.c,tq:true,src:t.src,h:"家庭教師の確認問題"+(t.lbl?"（元の問題："+t.lbl+"）":"")}))}
+const ALL=()=>Q.concat(PQ,tutorQs());
 const changed=q=>q.law&&q.law.s==="changed";
 const subNo=q=>{if(q.grp)return"（答えを選ぶ問題は1問にまとめて出題）";const t=q.id.split("_").pop();return /[abc]/.test(t)?"("+t+")":"選択肢"+t};
-const label=q=>q.past?`${q.y}年${q.m}月 問${q.no}`:"オリジナル問題";
+const label=q=>q.past?`${q.y}年${q.m}月 問${q.no}`:q.tq?"家庭教師の確認問題":"オリジナル問題";
 const officialPdf=q=>`https://www.kinzai.or.jp/uploads/lib/question/${q.y}${String(q.m).padStart(2,"0")}/fp01_g_kiso.pdf`;
 const siteUrl=q=>`https://fp1-siken.com/kakomon/${q.y}_${q.m}/${String(q.no).padStart(2,"0")}.html`;
 
@@ -424,6 +430,7 @@ function renderHome(){
     </div>
     <label class="f">試験日（変更できます）<input type="date" id="examDate" value="${S.exam}"></label>
   </section>
+  ${stuckHTML()}
   ${voiceSettings()}
   ${aiSettings()}
   <section class="card">
@@ -437,6 +444,7 @@ function renderHome(){
   V.querySelector("#goDue")?.addEventListener("click",()=>start(dueQ(),"今日の復習"));
   V.querySelector("#goPass")?.addEventListener("click",()=>start(passQ(),"パスした問題"));
   V.querySelector("#goNew")?.addEventListener("click",()=>start(shuffle(nextNew).slice(0,20),"新しい〇×20問"));
+  V.querySelector("#goStuck")?.addEventListener("click",()=>start(stuckQ(),"つまずいた問題"));
   V.querySelector("#examDate").addEventListener("change",e=>{if(e.target.value){S.exam=e.target.value;save();render()}});
   voiceSettingsBind();aiSettingsBind();
 }
@@ -541,6 +549,7 @@ function renderQuiz(){
   </section>
   ${done?`<section class="card stack">
     <div class="verdict"><div class="stamp ${done.ok?"ok":done.pick==="u"?"uk":"ng"}">${done.ok?"正":done.pick==="u"?"？":"誤"}</div><div><strong>${done.ok?"正解":done.pick==="u"?"わからない":"不正解"}</strong><div class="muted">この文は ${isO?"〇（正しい）":"×（誤り）"}</div></div></div>
+    ${S.my&&S.my[q.id]?`<div class="expbox mine"><div class="label">📝 自分専用の解説（家庭教師の説明を保存）</div><p>${esc(S.my[q.id].t)}</p><button class="btn" id="myDel" style="min-height:34px;font-size:.8rem;padding:2px 10px">この保存を消す</button></div>`:""}
     ${exp}
     ${done.ok?`<div class="label">自信はどのくらい？（次に出る日が変わります）</div>
       <div class="rate"><button class="btn" data-rate="unsure">あやしい<br><span class="muted">${STEPS[0]}日後</span></button><button class="btn primary" data-rate="sure">覚えた<br><span class="muted" style="color:inherit;opacity:.8">${STEPS[Math.min(((c&&c.b)||0)+1,STEPS.length-1)]}日後</span></button></div>`
@@ -552,6 +561,7 @@ function renderQuiz(){
   V.querySelector("#passBtn")?.addEventListener("click",()=>doPass(q));
   V.querySelectorAll("[data-rate]").forEach(b=>b.addEventListener("click",()=>rate(q,b.dataset.rate)));
   if(done)V.querySelector(".verdict").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion:reduce)").matches?"auto":"smooth",block:"start"});
+  V.querySelector("#myDel")?.addEventListener("click",()=>{if(confirm("自分専用の解説を消しますか？")){delete S.my[q.id];save();renderQuiz()}});
   calcBind(q);tutorBind(q);voiceBind(q);voiceAfterRender(q,done);
 }
 /* ===== 電卓（計算問題のとき表示） ===== */
@@ -717,6 +727,7 @@ function voiceAfterRender(q,done){
     const isO=q.a==="o";
     let txt=(done.ok?"正解。":done.pick==="u"?"わからない、ですね。":"不正解。")+"この文は、"+(isO?"まる":"ばつ")+"です。";
     if(q.past&&changed(q))txt+="法改正で答えが変わった文です。";
+    if(S.my&&S.my[q.id])txt+="自分専用の解説。"+S.my[q.id].t+"。";
     if(q.e)txt+="解説。"+q.e;
     txt+=done.ok?"覚えた？ あやしい？":"";
     speak(txt,()=>{
@@ -826,7 +837,8 @@ function voiceSettingsBind(){
 const AI_KEY="fp1_gemini_key",AI_MODEL="fp1_gemini_model",AI_USE="fp1_ai_use";
 const lsGet=k=>{try{return localStorage.getItem(k)||""}catch(e){return""}};
 const lsSet=(k,v)=>{try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}};
-const aiKey=()=>lsGet(AI_KEY).trim();
+const ON_PAGES=/github\.io$|^localhost$|^127\.0\.0\.1$/.test(location.hostname);   // 家庭教師（Gemini）はGitHub Pages版で使う
+const aiKey=()=>ON_PAGES?lsGet(AI_KEY).trim():"";
 function aiUse(add){let u={};try{u=JSON.parse(lsGet(AI_USE)||"{}")}catch(e){}if(u.d!==today())u={d:today(),n:0};if(add){u.n++;lsSet(AI_USE,JSON.stringify(u))}return u.n}
 let TUT={qid:null,msgs:[],busy:false,err:""};
 const TUT_SYS=`あなたはFP1級学科試験（基礎編）の家庭教師です。相手は専門用語に慣れていない社会人の受験者で、スマホで勉強しています。
@@ -835,7 +847,9 @@ const TUT_SYS=`あなたはFP1級学科試験（基礎編）の家庭教師で�
 ・耳で聞いてもわかる話し言葉で、1回の返事は300字以内。箇条書き記号、太字、見出しなどの記号は使わない。
 ・相手がつまずいた点だけに絞り、具体例や数字を使って説明する。専門用語を使うときは、ひとことで意味も言う。
 ・説明の最後に、同じポイントを別の角度から確かめる〇×問題を1問出し、「まる？ ばつ？」で終える。
-・相手が〇×に答えたら、合っているかを判定して短く理由を言う。まだ理解があやしそうなら、別のたとえで説明し直す。`;
+・相手が〇×に答えたら、合っているかを判定して短く理由を言う。まだ理解があやしそうなら、別のたとえで説明し直す。
+・〇×問題を出した返事では、最後の行に、次の形式の1行を必ず付ける（この行はアプリが読み取って画面には出さない）。
+<<確認|o|問題文|ひとことの理由>>　（正しい文なら o、誤りの文なら x。問題文は「まる？ ばつ？」を除いた文だけ）`;
 function tutorContext(q){
   const sib=(RAW||[]).filter(x=>x.p===q.p).map(x=>`${x.a==="o"?"〇":"×"} ${x.s}${x.e?"（解説："+x.e+"）":""}`).join("\n");
   return `【問題】${q.past?`${q.y}年${q.m}月 問${q.no}\n`:""}${q.h||""}
@@ -875,11 +889,28 @@ async function aiCall(contents){
 const AI_ERR={nokey:"ホーム画面の「AI家庭教師」でGeminiのキーを入れると使えます。",key:"キーが正しくないようです。ホーム画面の「AI家庭教師」でキーを確かめてください。",limit:"今日の無料分の上限に達したようです。下の「Claudeで聞く」を使うか、明日また使ってください。",net:"Geminiに接続できませんでした。電波を確かめてください。claude.aiの中では使えないことがあるので、そのときはGitHub Pages版で使ってください。",model:"AIの種類を選び直しました。もう一度送ってください。",empty:"AIから返事がありませんでした。言い方を変えて、もう一度送ってください。",other:"AIでエラーが起きました。少し待ってからもう一度送ってください。"};
 async function tutorAsk(q,text){
   if(TUT.qid!==q.id)TUT={qid:q.id,msgs:[],busy:false,err:""};
+  if(!TUT.msgs.length){S.stuck=S.stuck||{};const o=S.stuck[q.id]||{n:0};S.stuck[q.id]={n:o.n+1,d:today()};save()}
   TUT.msgs.push({role:"user",text});TUT.busy=true;TUT.err="";tutorPaint(q);
   const contents=TUT.msgs.map((m,i)=>({role:m.role,parts:[{text:i===0?tutorContext(q)+"\n\n【受験者の質問】"+m.text:m.text}]}));
-  try{const a=await aiCall(contents);TUT.msgs.push({role:"model",text:a});TUT.busy=false;tutorPaint(q);return a}
+  try{
+    let a=await aiCall(contents);
+    const m=a.match(/<<\s*確認\s*[|｜]\s*([ox〇×○])\s*[|｜]([^|｜>]+)[|｜]?([^>]*)>>/);
+    a=a.replace(/<<[^>]*>>/g,"").trim();
+    let note="";
+    if(m)note=addCheckQ(q,/[o〇○]/.test(m[1])?"o":"x",m[2].trim(),(m[3]||"").trim());
+    TUT.msgs.push({role:"model",text:a,note});TUT.busy=false;tutorPaint(q);return a}
   catch(e){TUT.msgs.pop();TUT.busy=false;TUT.err=AI_ERR[e.message]||AI_ERR.other;tutorPaint(q);return null}
 }
+function addCheckQ(q,a,s,e){
+  S.tq=S.tq||[];
+  const base=q.tq?(S.tq.find(t=>t.id===q.id)||{}).src||q.id:q.id;
+  if(S.tq.some(t=>t.s===s))return"";
+  const id="tq_"+Date.now().toString(36);
+  S.tq.push({id,s,a,e:e||"家庭教師が出した確認問題です。",src:base,c:q.c||"L",lbl:q.past?label(q):"",d:today()});
+  S.cards[id]={b:1,c:0,w:0,lr:"o",d:addDays(3),t:today()};
+  save();return"✅ この確認問題を復習に入れました（3日後に出ます）";
+}
+function saveMine(q,t){S.my=S.my||{};S.my[q.id]={t,d:today()};save()}
 function claudeUrl(q){
   const t=tutorContext(q)+"\n\nFP1級の勉強中です。この解説がよくわからないので、家庭教師としてかみくだいて教えてください。2026年10月1日時点の法令でお願いします。最後に理解を確かめる〇×を1問出してください。";
   return "https://claude.ai/new?q="+encodeURIComponent(t.slice(0,12000));
@@ -894,14 +925,15 @@ function tutorHTML(q){
       <div class="chips" id="tutChips">${TUT_CHIPS.map(([t,m],i)=>`<button class="btn chipbtn" data-tc="${i}">${t}</button>`).join("")}</div>
       <div class="row" style="gap:6px;flex-wrap:nowrap"><input id="tutIn" type="text" autocomplete="off" placeholder="家庭教師に質問（例：なんで夫だけ55歳なの？）" aria-label="家庭教師への質問"><button class="btn primary" id="tutSend" style="flex:none">送る</button></div>
       ${vset().mode==="free"?`<p class="note" style="margin:0">声なら「教えて」と言うと家庭教師が始まります。</p>`:""}`
-    :`<p class="note" style="margin:0">ホーム画面の「AI家庭教師」でGeminiのキー（無料）を入れると、ここで質問できます。</p>`}
+    :`<p class="note" style="margin:0">${ON_PAGES?"ホーム画面の「AI家庭教師」でGeminiのキー（無料）を入れると、ここで質問できます。":"Geminiの家庭教師はGitHub Pages版で使えます。ここでは下のボタンからClaudeに質問できます。"}</p>`}
     <a class="btn block" href="${claudeUrl(q)}" target="_blank" rel="noopener">💬 Claudeで聞く ↗（今の定額プランのまま）</a>
   </section>`;
 }
 function tutorPaint(q){
   const log=document.getElementById("tutLog");if(!log)return;
-  log.innerHTML=TUT.msgs.map(m=>`<div class="tmsg ${m.role==="user"?"me":"ai"}">${m.role==="user"?"":`<button class="btn tspk" data-say="1" aria-label="読み上げる">🔊</button>`}${esc(m.text)}</div>`).join("")+(TUT.busy?`<div class="tmsg ai muted">考えています…</div>`:"")+(TUT.err?`<div class="tmsg err">${esc(TUT.err)}</div>`:"");
-  log.querySelectorAll("[data-say]").forEach(b=>b.addEventListener("click",()=>speak(b.parentElement.textContent.replace("🔊",""))));
+  log.innerHTML=TUT.msgs.map((m,i)=>`<div class="tmsg ${m.role==="user"?"me":"ai"}">${m.role==="user"?"":`<button class="btn tspk" data-say="${i}" aria-label="読み上げる">🔊</button>`}${esc(m.text)}${m.role==="model"?`<div class="tact"><button class="btn tsave" data-keep="${i}">${S.my&&S.my[q.id]&&S.my[q.id].t===m.text?"📝 保存済み":"📝 わかりやすかった（この説明を保存）"}</button></div>`:""}${m.note?`<div class="tnote">${esc(m.note)}</div>`:""}</div>`).join("")+(TUT.busy?`<div class="tmsg ai muted">考えています…</div>`:"")+(TUT.err?`<div class="tmsg err">${esc(TUT.err)}</div>`:"");
+  log.querySelectorAll("[data-say]").forEach(b=>b.addEventListener("click",()=>speak(TUT.msgs[b.dataset.say].text)));
+  log.querySelectorAll("[data-keep]").forEach(b=>b.addEventListener("click",()=>{saveMine(q,TUT.msgs[b.dataset.keep].text);tutorPaint(q)}));
   const ch=document.getElementById("tutChips");if(ch)ch.hidden=TUT.msgs.length>0;
   const sb=document.getElementById("tutSend");if(sb)sb.disabled=TUT.busy;
 }
@@ -931,15 +963,17 @@ function tutorVoice(q,done,first){
   const listen=until=>{
     if(!vOn||!session||session.answered!==done)return;
     if(Date.now()>until){vStatus("⏸ 聞き取りを休みました。「もう一度読む」で再開できます");return}
-    vStatus("🧑‍🏫 家庭教師：質問や〇×の答えを話してください（「次」で問題に戻る）");
+    vStatus("🧑‍🏫 家庭教師：質問や〇×の答えを話してください（「わかりやすかった」で保存・「次」で問題に戻る）");
     vListenText(async t=>{
       const c=t.replace(/[\s。、．,.!！?？]/g,"");
       if(/^(やめ|ストップ|止めて|とめて)/.test(c))return vEnd();
+      if(/わかりやすかった|分かりやすかった|わかりやすい|分かりやすい|保存して|ほぞんして/.test(c)){const last=[...TUT.msgs].reverse().find(m=>m.role==="model");if(last){saveMine(q,last.text);tutorPaint(q)}return speak(last?"自分専用の解説として保存しました。次にこの問題が出たら最初に読みます。":"まだ説明していません。",()=>listen(until))}
       if(/^(次|つぎ|次へ|もういい|わかった|分かった|理解した|ありがとう|オッケー|おっけー|OK)/i.test(c)){vStatus("問題に戻ります");return speak("では問題に戻ります。"+(done.ok?"覚えた？ あやしい？":"次に進むときは、次、と言ってください。"),()=>waitNext(q,done))}
       if(/^(もう一度|もういちど|もう一回|もう1回)$/.test(c)){const last=[...TUT.msgs].reverse().find(m=>m.role==="model");return speak(last?last.text:"まだ説明していません。",()=>listen(until))}
       vStatus("🧑‍🏫 考えています…");
       const a=await tutorAsk(q,t);
-      speak(a||TUT.err,()=>listen(Date.now()+V_WAIT));
+      const last=TUT.msgs[TUT.msgs.length-1];
+      speak((a||TUT.err)+(a&&last&&last.note?"。確認の問題は、復習にも入れておきます。":""),()=>listen(Date.now()+V_WAIT));
     },why=>{
       if(why==="nomic"){vStatus("このページではマイクが使えません");vMicNote();return}
       setTimeout(()=>listen(until),300);
@@ -949,6 +983,7 @@ function tutorVoice(q,done,first){
   else listen(Date.now()+V_WAIT);
 }
 function aiSettings(){
+  if(!ON_PAGES)return `<section class="card stack"><h2>🧑‍🏫 AI家庭教師</h2><p class="note" style="margin:0">Geminiの家庭教師は <a href="${PAGES_URL}" target="_blank" rel="noopener">GitHub Pages版</a> で使えます。このページでは、解説の下の「Claudeで聞く」から質問できます。</p></section>`;
   const k=aiKey(),m=lsGet(AI_MODEL);
   return `<section class="card stack">
     <h2>🧑‍🏫 AI家庭教師（Gemini・無料）</h2>
@@ -960,6 +995,19 @@ function aiSettings(){
     <input id="aikey" type="password" autocomplete="off" placeholder="${k?"キーを変更するときは貼り付け":"ここにキーを貼り付け"}" aria-label="GeminiのAPIキー">
     <div class="row" style="gap:8px"><button class="btn primary" id="aisave">保存して確認</button>${k?`<button class="btn" id="aidel">キーを削除</button>`:""}</div>
     <p class="note" id="aistat" style="margin:0"></p>
+  </section>`;
+}
+// 家庭教師を呼んだ問題（つまずき）
+function stuckQ(){const st=S.stuck||{};const m=new Map(ALL().map(q=>[q.id,q]));return Object.keys(st).filter(id=>m.has(id)).sort((a,b)=>st[b].n-st[a].n||(st[b].d>st[a].d?1:-1)).map(id=>m.get(id))}
+function stuckHTML(){
+  const st=S.stuck||{},L=stuckQ();if(!L.length)return"";
+  const byC={};L.forEach(q=>{byC[q.c]=(byC[q.c]||0)+st[q.id].n});
+  const theme=q=>(q.h||q.q||"").replace(/（以下.*?）/g,"").replace(/に関する次の.*$/,"").slice(0,30);
+  return `<section class="card stack">
+    <h2>🧩 つまずきの多いテーマ</h2>
+    <p class="note" style="margin:0">家庭教師を呼んだ問題です。分野別の回数：${Object.entries(byC).sort((a,b)=>b[1]-a[1]).map(([c,n])=>`${CATS[c]||c} ${n}回`).join("・")}</p>
+    <ul class="stuck" style="list-style:none;margin:0;padding:0">${L.slice(0,5).map(q=>`<li><span>${esc(theme(q))}<br><small class="muted">${esc(label(q))}</small></span><span class="muted" style="flex:none">${st[q.id].n}回</span></li>`).join("")}</ul>
+    <button class="btn block" id="goStuck">つまずいた問題をまとめて解く（${L.length}問）</button>
   </section>`;
 }
 function aiSettingsBind(){
