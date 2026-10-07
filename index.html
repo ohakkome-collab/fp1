@@ -858,11 +858,13 @@ ${q.vh?"【資料の内容】"+q.vh+"\n":""}【いま出題した文】${q.q}
 【アプリの解説】${q.e||"なし"}
 ${q.law&&q.law.t?"【法改正メモ】"+q.law.t+"\n":""}${sib?"【同じ問題のほかの文】\n"+sib:""}`;
 }
+// 時間切れつきの通信（返事が来ないまま待ち続けないように）
+async function fetchTO(url,opt,ms){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);try{return await fetch(url,{...opt,signal:c.signal})}finally{clearTimeout(t)}}
 // 使えるAI（Geminiのモデル）の候補を、良さそうな順に並べる。うまくいったものを覚えておく
 async function aiModels(key){
   let names=[];
   try{
-    const r=await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",{headers:{"x-goog-api-key":key}});
+    const r=await fetchTO("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",{headers:{"x-goog-api-key":key}},12000);
     if(r.status===400||r.status===401||r.status===403){const j=await r.json().catch(()=>({}));const e=new Error("key");e.detail=aiDetail(r.status,j);throw e}
     if(r.ok){const j=await r.json();
       names=(j.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent")).map(m=>m.name.replace(/^models\//,""))
@@ -876,14 +878,18 @@ async function aiModels(key){
   return [...new Set([saved,...names,"gemini-flash-latest","gemini-flash-lite-latest","gemini-2.5-flash","gemini-2.5-flash-lite"].filter(Boolean))];
 }
 function aiDetail(status,j){const m=j&&j.error&&(j.error.message||j.error.status);return `（${status}${m?"："+String(m).slice(0,120):""}）`}
-async function aiCall(contents){
+async function aiCall(contents,onStep){
   const key=aiKey();if(!key)throw new Error("nokey");
-  const list=await aiModels(key);
+  onStep&&onStep("使えるAIを調べています…");
+  const list=(await aiModels(key)).slice(0,5);
   let last=null;
-  for(const model of list.slice(0,8)){
+  for(const [i,model] of list.entries()){
+    onStep&&onStep(`${model} につないでいます（${i+1}/${list.length}）…`);
     let r,j={};
-    try{r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},body:JSON.stringify({systemInstruction:{parts:[{text:TUT_SYS}]},contents,generationConfig:{temperature:0.4,maxOutputTokens:4096}})})}
-    catch(e){const er=new Error("net");er.detail="";throw er}
+    try{r=await fetchTO(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},body:JSON.stringify({systemInstruction:{parts:[{text:TUT_SYS}]},contents,generationConfig:{temperature:0.4,maxOutputTokens:4096}})},25000)}
+    catch(e){
+      if(e.name==="AbortError"){last=new Error("timeout");last.detail=`（${model}：25秒たっても返事なし）`;if(lsGet(AI_MODEL)===model)lsSet(AI_MODEL,"");continue}
+      const er=new Error("net");er.detail="";throw er}
     j=await r.json().catch(()=>({}));
     const msg=String(j&&j.error&&j.error.message||"");
     if(r.ok){
@@ -903,14 +909,14 @@ async function aiCall(contents){
   throw last||new Error("other");
 }
 const aiErrText=e=>(AI_ERR[e&&e.message]||AI_ERR.other)+(e&&e.detail?"\n詳しい内容"+e.detail:"");
-const AI_ERR={nokey:"ホーム画面の「AI家庭教師」でGeminiのキーを入れると使えます。",key:"キーが正しくないようです。ホーム画面の「AI家庭教師」でキーを確かめてください。",limit:"今日の無料分の上限に達したようです。下の「Claudeで聞く」を使うか、明日また使ってください。",net:"Geminiに接続できませんでした。電波を確かめてください。claude.aiの中では使えないことがあるので、そのときはGitHub Pages版で使ってください。",model:"使えるAIの種類が見つかりませんでした。少し待ってからもう一度試してください。",region:"お住まいの地域ではGeminiの無料APIが使えないようです。「Claudeで聞く」を使ってください。",empty:"AIから返事がありませんでした。言い方を変えて、もう一度送ってください。",other:"AIでエラーが起きました（混雑など）。少し待ってからもう一度送ってください。"};
+const AI_ERR={nokey:"ホーム画面の「AI家庭教師」でGeminiのキーを入れると使えます。",key:"キーが正しくないようです。ホーム画面の「AI家庭教師」でキーを確かめてください。",limit:"今日の無料分の上限に達したようです。下の「Claudeで聞く」を使うか、明日また使ってください。",net:"Geminiに接続できませんでした。電波を確かめてください。claude.aiの中では使えないことがあるので、そのときはGitHub Pages版で使ってください。",model:"使えるAIの種類が見つかりませんでした。少し待ってからもう一度試してください。",timeout:"AIの返事が来ませんでした（混雑しているようです）。少し待ってからもう一度試してください。",region:"お住まいの地域ではGeminiの無料APIが使えないようです。「Claudeで聞く」を使ってください。",empty:"AIから返事がありませんでした。言い方を変えて、もう一度送ってください。",other:"AIでエラーが起きました（混雑など）。少し待ってからもう一度送ってください。"};
 async function tutorAsk(q,text){
   if(TUT.qid!==q.id)TUT={qid:q.id,msgs:[],busy:false,err:""};
   if(!TUT.msgs.length){S.stuck=S.stuck||{};const o=S.stuck[q.id]||{n:0};S.stuck[q.id]={n:o.n+1,d:today()};save()}
   TUT.msgs.push({role:"user",text});TUT.busy=true;TUT.err="";tutorPaint(q);
   const contents=TUT.msgs.map((m,i)=>({role:m.role,parts:[{text:i===0?tutorContext(q)+"\n\n【受験者の質問】"+m.text:m.text}]}));
   try{
-    let a=await aiCall(contents);
+    let a=await aiCall(contents,t=>{TUT.step=t;const b=document.getElementById("tutBusy");if(b)b.textContent="考えています… "+t});
     const m=a.match(/<<\s*確認\s*[|｜]\s*([ox〇×○])\s*[|｜]([^|｜>]+)[|｜]?([^>]*)>>/);
     a=a.replace(/<<[^>]*>>/g,"").trim();
     let note="";
@@ -948,7 +954,7 @@ function tutorHTML(q){
 }
 function tutorPaint(q){
   const log=document.getElementById("tutLog");if(!log)return;
-  log.innerHTML=TUT.msgs.map((m,i)=>`<div class="tmsg ${m.role==="user"?"me":"ai"}">${m.role==="user"?"":`<button class="btn tspk" data-say="${i}" aria-label="読み上げる">🔊</button>`}${esc(m.text)}${m.role==="model"?`<div class="tact"><button class="btn tsave" data-keep="${i}">${S.my&&S.my[q.id]&&S.my[q.id].t===m.text?"📝 保存済み":"📝 わかりやすかった（この説明を保存）"}</button></div>`:""}${m.note?`<div class="tnote">${esc(m.note)}</div>`:""}</div>`).join("")+(TUT.busy?`<div class="tmsg ai muted">考えています…</div>`:"")+(TUT.err?`<div class="tmsg err">${esc(TUT.err)}</div>`:"");
+  log.innerHTML=TUT.msgs.map((m,i)=>`<div class="tmsg ${m.role==="user"?"me":"ai"}">${m.role==="user"?"":`<button class="btn tspk" data-say="${i}" aria-label="読み上げる">🔊</button>`}${esc(m.text)}${m.role==="model"?`<div class="tact"><button class="btn tsave" data-keep="${i}">${S.my&&S.my[q.id]&&S.my[q.id].t===m.text?"📝 保存済み":"📝 わかりやすかった（この説明を保存）"}</button></div>`:""}${m.note?`<div class="tnote">${esc(m.note)}</div>`:""}</div>`).join("")+(TUT.busy?`<div class="tmsg ai muted" id="tutBusy">考えています…</div>`:"")+(TUT.err?`<div class="tmsg err">${esc(TUT.err)}</div>`:"");
   log.querySelectorAll("[data-say]").forEach(b=>b.addEventListener("click",()=>speak(TUT.msgs[b.dataset.say].text)));
   log.querySelectorAll("[data-keep]").forEach(b=>b.addEventListener("click",()=>{saveMine(q,TUT.msgs[b.dataset.keep].text);tutorPaint(q)}));
   const ch=document.getElementById("tutChips");if(ch)ch.hidden=TUT.msgs.length>0;
@@ -1033,7 +1039,7 @@ function aiSettingsBind(){
     const v=(V.querySelector("#aikey").value||"").trim()||aiKey();
     if(!v){st.textContent="キーを貼り付けてください。";return}
     const old=aiKey();lsSet(AI_KEY,v);lsSet(AI_MODEL,"");st.textContent="確認しています…";
-    try{const a=await aiCall([{role:"user",parts:[{text:"接続テストです。「準備OKです」とだけ返事してください。"}]}]);st.textContent="✅ つながりました（"+lsGet(AI_MODEL)+"）。AIの返事："+a.slice(0,40);setTimeout(render,1500)}
+    try{const a=await aiCall([{role:"user",parts:[{text:"接続テストです。「準備OKです」とだけ返事してください。"}]}],t=>st.textContent="確認しています… "+t);st.textContent="✅ つながりました（"+lsGet(AI_MODEL)+"）。AIの返事："+a.slice(0,40);setTimeout(render,1500)}
     catch(e){st.textContent="❌ "+aiErrText(e);if(e.message==="key")lsSet(AI_KEY,old)}
   });
   V.querySelector("#aidel")?.addEventListener("click",()=>{if(confirm("このスマホに保存したGeminiのキーを削除しますか？")){lsSet(AI_KEY,"");lsSet(AI_MODEL,"");render()}});
