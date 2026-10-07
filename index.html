@@ -301,7 +301,7 @@ async function initCloud(){
       const remote=snap.data();
       // 回答数が多い方を採用（端末とクラウドのずれ対策）
       const cnt=o=>Object.values(o.cards||{}).reduce((s,c)=>s+(c.c||0)+(c.w||0),0)+Object.values(o.pq||{}).reduce((s,c)=>s+(c.c||0)+(c.w||0),0)+(o.kako||[]).length;
-      if(cnt(remote)>=cnt(S)){S=Object.assign({cards:{},kako:[],pq:{},pr:"r12",pc:"",exam:S.exam,log:{}},JSON.parse(JSON.stringify(remote)));migrate();saveLocal()}
+      if(cnt(remote)>=cnt(S)){S=Object.assign({cards:{},kako:[],pq:{},pr:"r12",pc:"",exam:S.exam,log:{}},JSON.parse(JSON.stringify(remote)));migrate();if(pqState==="ok")migrateGroups();saveLocal()}
       else flush();
     }else if(Object.keys(S.cards).length||Object.keys(S.pq).length){flush()}
     setSync("クラウドに保存済み");
@@ -315,12 +315,44 @@ const catOf=no=>no<=8?"L":no<=15?"R":no<=24?"K":no<=33?"T":no<=41?"F":"S";
 const EXAMS=[[2026,9],[2026,5],[2026,1],[2025,9],[2025,5],[2025,1],[2024,9],[2024,5],[2024,1],[2023,9],[2023,5],[2023,1],[2022,9],[2022,5],[2022,1]];
 // オリジナルの4択問題も〇×に分ける
 Q.splice(0,Q.length,...Q.flatMap(q=>q.type!=="mc"?[q]:q.ch.map((t,i)=>({id:q.id+"_"+(i+1),c:q.c,k:q.k,h:q.q+"（次の答えは正しいか）",q:"答え："+t,a:i===q.a?"o":"x",e:q.e}))));
-let PQ=[],pqState="loading",IMG={};
+let PQ=[],RAW=[],pqState="loading",IMG={};
+/* 「答え：〇〇円」のように4つの答えから選ぶ問題（計算など）は、同じ計算を4回させないよう1問にまとめる。
+   出題のたびに4つの答えのうち1つを〇×で出す（半分の確率で正しい答え）。記録は問題単位（id＝親番号_c）。 */
+function pickVar(G){
+  if(!G.grp)return G;
+  const ok=G.grp.filter(v=>v.a==="o"),ng=G.grp.filter(v=>v.a!=="o");
+  const pool=ok.length&&(Math.random()<.5||!ng.length)?ok:ng;
+  const v=pool[Math.floor(Math.random()*pool.length)];
+  Object.assign(G,{q:v.s,s:v.s,a:v.a,e:v.e,law:v.law,vid:v.id});
+  return G;
+}
+function groupCalc(list){
+  const by={};list.forEach(o=>(by[o.p]=by[o.p]||[]).push(o));
+  const out=[],seen={};
+  for(const o of list){
+    const g=by[o.p];
+    if(!g.every(x=>/^答え：/.test(x.s))){out.push(o);continue}
+    if(seen[o.p])continue;seen[o.p]=1;
+    out.push(pickVar({...g[0],id:o.p+"_c",grp:g}));
+  }
+  return out;
+}
+// 以前に1文ずつ解いた記録を、まとめた問題に引き継ぐ
+function migrateGroups(){
+  if(!S||!S.cards)return;
+  for(const G of PQ){
+    if(!G.grp)continue;
+    if(!S.cards[G.id]){const cs=G.grp.map(v=>S.cards[v.id]).filter(Boolean).sort((a,b)=>(b.t||"")<(a.t||"")?-1:1);if(cs.length)S.cards[G.id]={...cs[0]}}
+    if(S.pass&&G.grp.some(v=>S.pass[v.id])&&!S.pass[G.id]){S.pass[G.id]=G.grp.map(v=>S.pass[v.id]).filter(Boolean).sort()[0]}
+    if(S.pass)G.grp.forEach(v=>delete S.pass[v.id]);
+  }
+}
 async function loadImgs(){for(const f of ["imgs1.json","imgs2.json","imgs3.json","imgs4.json","imgs5.json","imgs6.json"]){try{const r=await fetch(f);if(r.ok)Object.assign(IMG,await r.json())}catch(e){}}if(session)renderQuiz()}
 async function loadPast(){
   try{
-    PQ=[];
-    for(const f of ["pasttf1.json","pasttf2.json"]){const r=await fetch(f);if(!r.ok)throw 0;const j=await r.json();PQ.push(...j.items.map(o=>({...o,h:j.h[o.p],q:o.s,c:catOf(o.no),past:true})))}
+    RAW=[];
+    for(const f of ["pasttf1.json","pasttf2.json"]){const r=await fetch(f);if(!r.ok)throw 0;const j=await r.json();RAW.push(...j.items.map(o=>({...o,h:j.h[o.p],q:o.s,c:catOf(o.no),past:true})))}
+    PQ=groupCalc(RAW);migrateGroups();
     pqState="ok";
   }catch(e){pqState="error"}
   if(!session)render();
@@ -328,7 +360,7 @@ async function loadPast(){
 }
 const ALL=()=>Q.concat(PQ);
 const changed=q=>q.law&&q.law.s==="changed";
-const subNo=q=>{const t=q.id.split("_").pop();return /[abc]/.test(t)?"("+t+")":"選択肢"+t};
+const subNo=q=>{if(q.grp)return"（答えを選ぶ問題は1問にまとめて出題）";const t=q.id.split("_").pop();return /[abc]/.test(t)?"("+t+")":"選択肢"+t};
 const label=q=>q.past?`${q.y}年${q.m}月 問${q.no}`:"オリジナル問題";
 const officialPdf=q=>`https://www.kinzai.or.jp/uploads/lib/question/${q.y}${String(q.m).padStart(2,"0")}/fp01_g_kiso.pdf`;
 const siteUrl=q=>`https://fp1-siken.com/kakomon/${q.y}_${q.m}/${String(q.no).padStart(2,"0")}.html`;
@@ -453,7 +485,7 @@ function renderStudy(){
 }
 
 /* ===== 出題（すべて〇×） ===== */
-function start(list,name){session={list:list.slice(),i:0,name,ok:0,ng:0,answered:null};render()}
+function start(list,name){list.forEach(pickVar);session={list:list.slice(),i:0,name,ok:0,ng:0,answered:null};render()}
 function renderQuiz(){
   const s=session;
   if(s.i>=s.list.length){
@@ -474,13 +506,13 @@ function renderQuiz(){
   const lawChip=q.past?(changed(q)?'<span class="chip ng">法改正で〇×が変わった</span>':q.law&&q.law.s==="note"?'<span class="chip kaisei">法改正メモ</span>':""):(q.k?'<span class="chip kaisei">法改正</span>':"");
   const img=q.img?(IMG[q.img]?`<details class="imgbox" open><summary>問題の資料（問題用紙の画像）を見る</summary><img class="qimg" src="${IMG[q.img]}" alt="問題の資料"><p class="note" style="margin:6px 0 0">画像の中の「次のうち〜はどれか」は、下の文が正しいかどうかに読み替えてください。</p></details>`:`<p class="note">資料の画像を読み込んでいます…</p>`):"";
   const head=q.h&&!(q.img&&IMG[q.img])?`<p class="qhead2">${esc(q.h)}</p>`:"";
-  const sibs=q.past?PQ.filter(x=>x.p===q.p):[];
+  const sibs=q.past?RAW.filter(x=>x.p===q.p):[];
   const exp=q.past?`
     ${q.e?`<div class="expbox"><div class="label">解説</div><p>${esc(q.e)}</p></div>`:`<div class="expbox"><div class="label">解説</div><p class="muted">この文の解説は準備中です。</p></div>`}
     ${changed(q)?`<div class="lawnote"><strong>法改正で〇×が変わりました（2026年10月1日時点の法律）</strong>${esc(q.law.t)}</div>`:""}
     ${q.law&&q.law.s==="note"?`<div class="lawnote"><strong>法改正メモ</strong>${esc(q.law.t)}</div>`:""}
     <details class="sibs"><summary>同じ問題のほかの文（${label(q)}）</summary>
-      <ul>${sibs.map(x=>`<li class="${x.id===q.id?"me":""}"><b class="${x.a==="o"?"tok":"tng"}">${x.a==="o"?"〇":"×"}</b><span>${esc(x.s)}${x.e&&x.id!==q.id?`<small>${esc(x.e)}</small>`:""}</span></li>`).join("")}</ul>
+      <ul>${sibs.map(x=>`<li class="${x.id===(q.vid||q.id)?"me":""}"><b class="${x.a==="o"?"tok":"tng"}">${x.a==="o"?"〇":"×"}</b><span>${esc(x.s)}${x.e&&x.id!==(q.vid||q.id)?`<small>${esc(x.e)}</small>`:""}</span></li>`).join("")}</ul>
     </details>
     <details class="src"><summary>出典</summary><p>一般社団法人 金融財政事情研究会 ファイナンシャル・プランニング技能検定 1級学科試験（基礎編）${q.y}年${q.m}月実施 問${q.no}。4つの選択肢を1つずつの〇×問題に作り替え、正誤は同会の模範解答から判定。解説はこのアプリのオリジナルです。${q.law&&q.law.s==="ok"?"2026年10月1日時点の法律で答えを確認済み。":""} <a href="${officialPdf(q)}" target="_blank" rel="noopener">原本PDF</a>・<a href="${siteUrl(q)}" target="_blank" rel="noopener">他サイトの解説</a></p></details>`
     :(q.e?`<div class="expbox"><div class="label">解説</div><p>${esc(q.e)}</p></div>`:"");
