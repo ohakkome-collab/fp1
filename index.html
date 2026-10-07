@@ -847,8 +847,9 @@ const TUT_SYS=`あなたはFP1級学科試験（基礎編）の家庭教師で�
 ・2026年10月1日時点の法令で説明する。下に渡す「アプリの解説」「法改正メモ」を正しい前提として扱い、食い違いそうなときは「公式の解説を優先してね」と添える。
 ・耳で聞いてもわかる話し言葉で、1回の返事は300字以内。箇条書き記号、太字、見出しなどの記号は使わない。
 ・相手がつまずいた点だけに絞り、具体例や数字を使って説明する。専門用語を使うときは、ひとことで意味も言う。
-・説明の最後に、同じポイントを別の角度から確かめる〇×問題を1問出し、「まる？ ばつ？」で終える。
-・相手が〇×に答えたら、合っているかを判定して短く理由を言う。まだ理解があやしそうなら、別のたとえで説明し直す。
+・質問攻めにしない。説明したら、そこで終える。「わかりましたか？」「ほかに質問は？」などの問いかけも付けない。
+・〇×問題は、相手が「確認問題を出して」と頼んだときだけ、同じポイントを別の角度から確かめる問題を1問出し、「まる？ ばつ？」で終える。
+・間違えた〇×について説明を頼まれたら、別のたとえで説明し直すだけにして、新しい問題は出さない。
 ・〇×問題を出した返事では、最後の行に、次の形式の1行を必ず付ける（この行はアプリが読み取って画面には出さない）。
 <<確認|o|問題文|ひとことの理由>>　（正しい文なら o、誤りの文なら x。問題文は「まる？ ばつ？」を除いた文だけ）`;
 function tutorContext(q){
@@ -943,7 +944,7 @@ async function tutorAnswer(q,pick,i){
   if(ok){const t="⭕ 正解です！"+(c.e?"理由："+c.e+"。":"")+"理解できていますね。";TUT.msgs.push({role:"model",text:t,local:true});tutorPaint(q);return t}
   const t="❌ 残念、正しくは"+(c.a==="o"?"〇（まる）":"×（ばつ）")+"です。"+(c.e?"理由："+c.e+"。":"");
   TUT.msgs.push({role:"model",text:t,local:true});tutorPaint(q);
-  const a=await tutorAsk(q,`確認問題「${c.s}」に「${pick==="o"?"まる":"ばつ"}」と答えて間違えました（正しくは${c.a==="o"?"まる":"ばつ"}）。どこで勘違いしやすいかを、別のたとえでもう一度説明してください。`,true);
+  const a=await tutorAsk(q,`確認問題「${c.s}」に「${pick==="o"?"まる":"ばつ"}」と答えて間違えました（正しくは${c.a==="o"?"まる":"ばつ"}）。どこで勘違いしやすいかを、別のたとえでもう一度説明してください。新しい問題は出さないでください。`,true);
   return t+(a?" "+a:"");
 }
 function saveMine(q,t){S.my=S.my||{};S.my[q.id]={t,d:today()};save()}
@@ -951,7 +952,7 @@ function claudeUrl(q){
   const t=tutorContext(q)+"\n\nFP1級の勉強中です。この解説がよくわからないので、家庭教師としてかみくだいて教えてください。2026年10月1日時点の法令でお願いします。最後に理解を確かめる〇×を1問出してください。";
   return "https://claude.ai/new?q="+encodeURIComponent(t.slice(0,12000));
 }
-const TUT_CHIPS=[["言葉の意味がわからない","この問題に出てくる言葉の意味がわからない。かんたんに教えて"],["なぜそうなるの？","なぜそういうルールになっているのか、理由がわからない"],["計算の手順","計算の手順を1つずつ教えて"],["似たルールとの違い","似たルールとの違いがわからない。比べて教えて"],["もっとかんたんに","解説をもっとかんたんな言葉で言い直して"],["たとえ話で","身近なたとえ話で説明して"]];
+const TUT_CHIPS=[["言葉の意味がわからない","この問題に出てくる言葉の意味がわからない。かんたんに教えて"],["なぜそうなるの？","なぜそういうルールになっているのか、理由がわからない"],["計算の手順","計算の手順を1つずつ教えて"],["似たルールとの違い","似たルールとの違いがわからない。比べて教えて"],["もっとかんたんに","解説をもっとかんたんな言葉で言い直して"],["たとえ話で","身近なたとえ話で説明して"],["✅ 確認問題を出して","理解できたか確かめたいので、確認の〇×問題を1問出して"]];
 function tutorHTML(q){
   if(TUT.qid!==q.id)TUT={qid:q.id,msgs:[],busy:false,err:""};
   const has=!!aiKey();
@@ -971,7 +972,7 @@ function tutorPaint(q){
   log.querySelectorAll("[data-say]").forEach(b=>b.addEventListener("click",()=>speak(TUT.msgs[b.dataset.say].text)));
   log.querySelectorAll("[data-ta]").forEach(b=>b.addEventListener("click",async()=>{const r=await tutorAnswer(q,b.dataset.ta,+b.dataset.ti);if(r&&vOn)speak(r,()=>{if(vOn&&vset().mode==="free"&&session&&session.answered)tutorVoice(q,session.answered,false)})}));
   log.querySelectorAll("[data-keep]").forEach(b=>b.addEventListener("click",()=>{saveMine(q,TUT.msgs[b.dataset.keep].text);tutorPaint(q)}));
-  const ch=document.getElementById("tutChips");if(ch)ch.hidden=TUT.msgs.length>0;
+  
   const sb=document.getElementById("tutSend");if(sb)sb.disabled=TUT.busy;
 }
 function tutorBind(q){
@@ -1000,7 +1001,7 @@ function tutorVoice(q,done,first){
   const listen=until=>{
     if(!vOn||!session||session.answered!==done)return;
     if(Date.now()>until){vStatus("⏸ 聞き取りを休みました。「もう一度読む」で再開できます");return}
-    vStatus(pendingCheck()?"🧑‍🏫 確認問題：「まる」か「ばつ」で答えてください（質問してもOK）":"🧑‍🏫 家庭教師：質問を話してください（「わかりやすかった」で保存・「次」で問題に戻る）");
+    vStatus(pendingCheck()?"🧑‍🏫 確認問題：「まる」か「ばつ」で答えてください（質問してもOK）":"🧑‍🏫 家庭教師：質問を話してください（「確認問題」で〇×・「わかりやすかった」で保存・「次」で問題に戻る）");
     vListenText(async t=>{
       const c=t.replace(/[\s。、．,.!！?？]/g,"");
       if(/^(やめ|ストップ|止めて|とめて)/.test(c))return vEnd();
@@ -1018,7 +1019,7 @@ function tutorVoice(q,done,first){
       setTimeout(()=>listen(until),300);
     });
   };
-  if(first)speak("家庭教師です。どこが引っかかりましたか？ 言葉の意味、理由、計算、似たルールとの違いなど、自由に話してください。",()=>listen(Date.now()+V_WAIT));
+  if(first)speak("家庭教師です。わからないところを話してください。",()=>listen(Date.now()+V_WAIT));
   else listen(Date.now()+V_WAIT);
 }
 function aiSettings(){
