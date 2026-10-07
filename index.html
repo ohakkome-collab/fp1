@@ -963,7 +963,7 @@ function tutorPaint(q){
 function tutorBind(q){
   const box=document.getElementById("tutor");if(!box)return;
   tutorPaint(q);
-  const send=async t=>{t=(t||"").trim();if(!t||TUT.busy)return;const a=await tutorAsk(q,t);if(a&&vset().mode!=="off")speak(a)};
+  const send=async t=>{t=(t||"").trim();if(!t||TUT.busy)return;const a=await tutorAsk(q,t);if(a&&vOn)speak(a)};
   box.querySelectorAll("[data-tc]").forEach(b=>b.addEventListener("click",()=>send(TUT_CHIPS[b.dataset.tc][1])));
   const inp=document.getElementById("tutIn");
   document.getElementById("tutSend")?.addEventListener("click",()=>{const t=inp.value;inp.value="";send(t)});
