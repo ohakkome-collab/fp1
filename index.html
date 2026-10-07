@@ -132,7 +132,8 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--sheet);border-t
 .tspk{float:right;min-height:32px;padding:2px 8px;margin:0 0 4px 6px;font-size:.9rem}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chipbtn{min-height:40px;font-size:.85rem;padding:4px 10px}
-.tact{margin-top:6px}.tsave{min-height:34px;font-size:.8rem;padding:2px 10px}
+.tact{margin-top:6px}
+.tutf{margin-top:8px;gap:8px}.tutf .btn{font-size:1.5rem;min-height:56px}.tsave{min-height:34px;font-size:.8rem;padding:2px 10px}
 .tnote{margin-top:6px;font-size:.8rem;color:var(--ok)}
 .expbox.mine{border-color:var(--accent)}
 .stuck li{display:flex;justify-content:space-between;gap:8px;padding-block:4px;border-bottom:1px solid var(--line);font-size:.9rem}
@@ -910,18 +911,18 @@ async function aiCall(contents,onStep){
 }
 const aiErrText=e=>(AI_ERR[e&&e.message]||AI_ERR.other)+(e&&e.detail?"\n詳しい内容"+e.detail:"");
 const AI_ERR={nokey:"ホーム画面の「AI家庭教師」でGeminiのキーを入れると使えます。",key:"キーが正しくないようです。ホーム画面の「AI家庭教師」でキーを確かめてください。",limit:"今日の無料分の上限に達したようです。下の「Claudeで聞く」を使うか、明日また使ってください。",net:"Geminiに接続できませんでした。電波を確かめてください。claude.aiの中では使えないことがあるので、そのときはGitHub Pages版で使ってください。",model:"使えるAIの種類が見つかりませんでした。少し待ってからもう一度試してください。",timeout:"AIの返事が来ませんでした（混雑しているようです）。少し待ってからもう一度試してください。",region:"お住まいの地域ではGeminiの無料APIが使えないようです。「Claudeで聞く」を使ってください。",empty:"AIから返事がありませんでした。言い方を変えて、もう一度送ってください。",other:"AIでエラーが起きました（混雑など）。少し待ってからもう一度送ってください。"};
-async function tutorAsk(q,text){
+async function tutorAsk(q,text,hidden){
   if(TUT.qid!==q.id)TUT={qid:q.id,msgs:[],busy:false,err:""};
   if(!TUT.msgs.length){S.stuck=S.stuck||{};const o=S.stuck[q.id]||{n:0};S.stuck[q.id]={n:o.n+1,d:today()};save()}
-  TUT.msgs.push({role:"user",text});TUT.busy=true;TUT.err="";tutorPaint(q);
-  const contents=TUT.msgs.map((m,i)=>({role:m.role,parts:[{text:i===0?tutorContext(q)+"\n\n【受験者の質問】"+m.text:m.text}]}));
+  TUT.msgs.push({role:"user",text,hidden:!!hidden});TUT.busy=true;TUT.err="";tutorPaint(q);
+  const contents=TUT.msgs.filter(m=>!m.local).map((m,i)=>({role:m.role,parts:[{text:i===0?tutorContext(q)+"\n\n【受験者の質問】"+m.text:m.text}]}));
   try{
     let a=await aiCall(contents,t=>{TUT.step=t;const b=document.getElementById("tutBusy");if(b)b.textContent="考えています… "+t});
     const m=a.match(/<<\s*確認\s*[|｜]\s*([ox〇×○])\s*[|｜]([^|｜>]+)[|｜]?([^>]*)>>/);
     a=a.replace(/<<[^>]*>>/g,"").trim();
     let note="";
     if(m)note=addCheckQ(q,/[o〇○]/.test(m[1])?"o":"x",m[2].trim(),(m[3]||"").trim());
-    TUT.msgs.push({role:"model",text:a,note});TUT.busy=false;tutorPaint(q);return a}
+    TUT.msgs.push({role:"model",text:a,note,check:m?{a:/[o〇○]/.test(m[1])?"o":"x",s:m[2].trim(),e:(m[3]||"").trim(),done:null}:null});TUT.busy=false;tutorPaint(q);return a}
   catch(e){TUT.msgs.pop();TUT.busy=false;TUT.err=aiErrText(e);tutorPaint(q);return null}
 }
 function addCheckQ(q,a,s,e){
@@ -932,6 +933,18 @@ function addCheckQ(q,a,s,e){
   S.tq.push({id,s,a,e:e||"家庭教師が出した確認問題です。",src:base,c:q.c||"L",lbl:q.past?label(q):"",d:today()});
   S.cards[id]={b:1,c:0,w:0,lr:"o",d:addDays(3),t:today()};
   save();return"✅ この確認問題を復習に入れました（3日後に出ます）";
+}
+// 家庭教師の確認問題に〇×で答える（ボタン・声の両方から）
+const pendingCheck=()=>{for(let i=TUT.msgs.length-1;i>=0;i--){const m=TUT.msgs[i];if(m.role==="model"&&!m.local)return m.check&&!m.check.done?{i,c:m.check}:null}return null};
+async function tutorAnswer(q,pick,i){
+  const m=TUT.msgs[i];if(!m||!m.check||m.check.done||TUT.busy)return"";
+  const c=m.check;c.done=pick;const ok=pick===c.a;
+  TUT.msgs.push({role:"user",text:pick==="o"?"〇（まる）":"×（ばつ）",local:true});
+  if(ok){const t="⭕ 正解です！"+(c.e?"理由："+c.e+"。":"")+"理解できていますね。";TUT.msgs.push({role:"model",text:t,local:true});tutorPaint(q);return t}
+  const t="❌ 残念、正しくは"+(c.a==="o"?"〇（まる）":"×（ばつ）")+"です。"+(c.e?"理由："+c.e+"。":"");
+  TUT.msgs.push({role:"model",text:t,local:true});tutorPaint(q);
+  const a=await tutorAsk(q,`確認問題「${c.s}」に「${pick==="o"?"まる":"ばつ"}」と答えて間違えました（正しくは${c.a==="o"?"まる":"ばつ"}）。どこで勘違いしやすいかを、別のたとえでもう一度説明してください。`,true);
+  return t+(a?" "+a:"");
 }
 function saveMine(q,t){S.my=S.my||{};S.my[q.id]={t,d:today()};save()}
 function claudeUrl(q){
@@ -954,8 +967,9 @@ function tutorHTML(q){
 }
 function tutorPaint(q){
   const log=document.getElementById("tutLog");if(!log)return;
-  log.innerHTML=TUT.msgs.map((m,i)=>`<div class="tmsg ${m.role==="user"?"me":"ai"}">${m.role==="user"?"":`<button class="btn tspk" data-say="${i}" aria-label="読み上げる">🔊</button>`}${esc(m.text)}${m.role==="model"?`<div class="tact"><button class="btn tsave" data-keep="${i}">${S.my&&S.my[q.id]&&S.my[q.id].t===m.text?"📝 保存済み":"📝 わかりやすかった（この説明を保存）"}</button></div>`:""}${m.note?`<div class="tnote">${esc(m.note)}</div>`:""}</div>`).join("")+(TUT.busy?`<div class="tmsg ai muted" id="tutBusy">考えています…</div>`:"")+(TUT.err?`<div class="tmsg err">${esc(TUT.err)}</div>`:"");
+  log.innerHTML=TUT.msgs.map((m,i)=>m.hidden?"":`<div class="tmsg ${m.role==="user"?"me":"ai"}">${m.role==="user"?"":`<button class="btn tspk" data-say="${i}" aria-label="読み上げる">🔊</button>`}${esc(m.text)}${m.role==="model"&&!m.local?`<div class="tact"><button class="btn tsave" data-keep="${i}">${S.my&&S.my[q.id]&&S.my[q.id].t===m.text?"📝 保存済み":"📝 わかりやすかった（この説明を保存）"}</button></div>`:""}${m.note?`<div class="tnote">${esc(m.note)}</div>`:""}${m.check?(m.check.done?`<div class="tnote" style="color:var(--sub)">あなたの答え：${m.check.done==="o"?"〇":"×"}</div>`:`<div class="tf tutf"><button class="btn" data-ta="o" data-ti="${i}" aria-label="まる" style="color:var(--ok)">〇</button><button class="btn" data-ta="x" data-ti="${i}" aria-label="ばつ" style="color:var(--ng)">×</button></div>`):""}</div>`).join("")+(TUT.busy?`<div class="tmsg ai muted" id="tutBusy">考えています…</div>`:"")+(TUT.err?`<div class="tmsg err">${esc(TUT.err)}</div>`:"");
   log.querySelectorAll("[data-say]").forEach(b=>b.addEventListener("click",()=>speak(TUT.msgs[b.dataset.say].text)));
+  log.querySelectorAll("[data-ta]").forEach(b=>b.addEventListener("click",async()=>{const r=await tutorAnswer(q,b.dataset.ta,+b.dataset.ti);if(r&&vOn)speak(r,()=>{if(vOn&&vset().mode==="free"&&session&&session.answered)tutorVoice(q,session.answered,false)})}));
   log.querySelectorAll("[data-keep]").forEach(b=>b.addEventListener("click",()=>{saveMine(q,TUT.msgs[b.dataset.keep].text);tutorPaint(q)}));
   const ch=document.getElementById("tutChips");if(ch)ch.hidden=TUT.msgs.length>0;
   const sb=document.getElementById("tutSend");if(sb)sb.disabled=TUT.busy;
@@ -963,7 +977,7 @@ function tutorPaint(q){
 function tutorBind(q){
   const box=document.getElementById("tutor");if(!box)return;
   tutorPaint(q);
-  const send=async t=>{t=(t||"").trim();if(!t||TUT.busy)return;const a=await tutorAsk(q,t);if(a&&vOn)speak(a)};
+  const send=async t=>{t=(t||"").trim();if(!t||TUT.busy)return;const a=await tutorAsk(q,t);if(a&&vOn)speak(a,()=>{if(vOn&&vset().mode==="free"&&session&&session.answered)tutorVoice(q,session.answered,false)})};
   box.querySelectorAll("[data-tc]").forEach(b=>b.addEventListener("click",()=>send(TUT_CHIPS[b.dataset.tc][1])));
   const inp=document.getElementById("tutIn");
   document.getElementById("tutSend")?.addEventListener("click",()=>{const t=inp.value;inp.value="";send(t)});
@@ -986,13 +1000,15 @@ function tutorVoice(q,done,first){
   const listen=until=>{
     if(!vOn||!session||session.answered!==done)return;
     if(Date.now()>until){vStatus("⏸ 聞き取りを休みました。「もう一度読む」で再開できます");return}
-    vStatus("🧑‍🏫 家庭教師：質問や〇×の答えを話してください（「わかりやすかった」で保存・「次」で問題に戻る）");
+    vStatus(pendingCheck()?"🧑‍🏫 確認問題：「まる」か「ばつ」で答えてください（質問してもOK）":"🧑‍🏫 家庭教師：質問を話してください（「わかりやすかった」で保存・「次」で問題に戻る）");
     vListenText(async t=>{
       const c=t.replace(/[\s。、．,.!！?？]/g,"");
       if(/^(やめ|ストップ|止めて|とめて)/.test(c))return vEnd();
       if(/わかりやすかった|分かりやすかった|わかりやすい|分かりやすい|保存して|ほぞんして/.test(c)){const last=[...TUT.msgs].reverse().find(m=>m.role==="model");if(last){saveMine(q,last.text);tutorPaint(q)}return speak(last?"自分専用の解説として保存しました。次にこの問題が出たら最初に読みます。":"まだ説明していません。",()=>listen(until))}
       if(/^(次|つぎ|次へ|もういい|わかった|分かった|理解した|ありがとう|オッケー|おっけー|OK)/i.test(c)){vStatus("問題に戻ります");return speak("では問題に戻ります。"+(done.ok?"覚えた？ あやしい？":"次に進むときは、次、と言ってください。"),()=>waitNext(q,done))}
       if(/^(もう一度|もういちど|もう一回|もう1回)$/.test(c)){const last=[...TUT.msgs].reverse().find(m=>m.role==="model");return speak(last?last.text:"まだ説明していません。",()=>listen(until))}
+      const pend=pendingCheck(),w=pend&&vParse(t);
+      if(pend&&(w==="o"||w==="x")){vStatus("🧑‍🏫 判定しています…");const r=await tutorAnswer(q,w,pend.i);return speak(r||TUT.err,()=>listen(Date.now()+V_WAIT))}
       vStatus("🧑‍🏫 考えています…");
       const a=await tutorAsk(q,t);
       const last=TUT.msgs[TUT.msgs.length-1];
