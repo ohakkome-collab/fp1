@@ -1273,7 +1273,7 @@ function renderLesson(){
 // 合言葉カード（全テーマの覚え方）
 function renderWords(){
   V.innerHTML=`<div class="qhead"><span>合言葉カード（${THEMES.length}テーマ）</span><button class="btn" id="wback" style="min-height:36px;padding:4px 10px;font-size:.8rem">もどる</button></div>
-  <section class="card"><div class="list">${THEMES.map(t=>`<div class="item"><span class="chip" style="flex:none">${CATS[FCAT[t.f]].slice(0,2)}</span><span class="grow"><b>${esc(shortTh(t.n))}</b><p>${esc(t.c)}</p></span></div>`).join("")}</div></section>`;
+  <section class="card"><div class="list">${THEMES.map(t=>`<div class="item"><span class="chip" style="flex:none">${({A:"ライフ",B:"リスク",C:"金融",D:"タックス",E:"不動産",F:"相続"})[t.f]}</span><span class="grow"><b>${esc(shortTh(t.n))}</b><p>${esc(t.c)}</p></span></div>`).join("")}</div></section>`;
   V.querySelector("#wback").onclick=()=>{lesson=null;render()};
 }
 
