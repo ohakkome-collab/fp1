@@ -952,14 +952,15 @@ function claudeUrl(q){
   const t=tutorContext(q)+"\n\nFP1級の勉強中です。この解説がよくわからないので、家庭教師としてかみくだいて教えてください。2026年10月1日時点の法令でお願いします。最後に理解を確かめる〇×を1問出してください。";
   return "https://claude.ai/new?q="+encodeURIComponent(t.slice(0,12000));
 }
-const TUT_CHIPS=[["言葉の意味がわからない","この問題に出てくる言葉の意味がわからない。かんたんに教えて"],["なぜそうなるの？","なぜそういうルールになっているのか、理由がわからない"],["計算の手順","計算の手順を1つずつ教えて"],["似たルールとの違い","似たルールとの違いがわからない。比べて教えて"],["もっとかんたんに","解説をもっとかんたんな言葉で言い直して"],["たとえ話で","身近なたとえ話で説明して"],["✅ 確認問題を出して","理解できたか確かめたいので、確認の〇×問題を1問出して"]];
+// 頼み方ボタンは3つだけ（計算問題のときは「計算の手順」も出す）。それぞれ答え方がはっきり違うように頼む
+const TUT_CHIPS=[["かんたんに説明して","専門用語を使わず、身近なたとえを1つ使って、3文以内でかんたんに説明して"],["なぜそうなるの？","このルールがある理由（制度の目的）だけを、2〜3文で説明して"],["計算の手順","計算式を1行に1つずつ、順番に示して。説明は最小限で"],["✅ 確認問題","理解できたか確かめたいので、確認の〇×問題を1問出して"]];
 function tutorHTML(q){
   if(TUT.qid!==q.id)TUT={qid:q.id,msgs:[],busy:false,err:""};
   const has=!!aiKey();
   return `<section class="card stack tutor" id="tutor">
     <h2>🧑‍🏫 解説がわからないとき</h2>
     ${has?`<div id="tutLog" class="tutlog"></div>
-      <div class="chips" id="tutChips">${TUT_CHIPS.map(([t,m],i)=>`<button class="btn chipbtn" data-tc="${i}">${t}</button>`).join("")}</div>
+      <div class="chips" id="tutChips">${TUT_CHIPS.map(([t,m],i)=>i===2&&!isCalcQ(q)?"":`<button class="btn chipbtn" data-tc="${i}">${t}</button>`).join("")}</div>
       <div class="row" style="gap:6px;flex-wrap:nowrap"><input id="tutIn" type="text" autocomplete="off" placeholder="家庭教師に質問（例：なんで夫だけ55歳なの？）" aria-label="家庭教師への質問"><button class="btn primary" id="tutSend" style="flex:none">送る</button></div>
       ${vset().mode==="free"?`<p class="note" style="margin:0">声なら「教えて」と言うと家庭教師が始まります。</p>`:""}`
     :`<p class="note" style="margin:0">${ON_PAGES?"ホーム画面の「AI家庭教師」でGeminiのキー（無料）を入れると、ここで質問できます。":"Geminiの家庭教師はGitHub Pages版で使えます。ここでは下のボタンからClaudeに質問できます。"}</p>`}
