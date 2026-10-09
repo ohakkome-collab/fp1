@@ -140,6 +140,7 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--sheet);border-t
 .term:focus-visible{outline:2px solid var(--accent);border-radius:2px}
 #glPop{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:var(--sheet);border-top:2px solid var(--accent);box-shadow:0 -4px 16px rgba(0,0,0,.15)}
 #glPop .glin{max-width:640px;margin:0 auto}
+.ptwrap summary{cursor:pointer;font-size:.85rem;font-weight:700;color:var(--accent);padding-block:4px}.ptwrap[open] summary{margin-bottom:6px}
 .ptbox{border:2px solid var(--accent);border-radius:10px;padding:10px 12px;background:var(--sheet)}
 .ptbox .pt1{font-weight:700;margin:4px 0;line-height:1.7}
 .ptbox .ptc{margin:4px 0;line-height:1.7}
@@ -564,6 +565,7 @@ function renderQuiz(){
     return;
   }
   const q=s.list[s.i],c=card(q.id),done=s.answered;
+  if(s.t0id!==q.id){s.t0id=q.id;s.t0=Date.now()}
   if(q.oyo)return renderOyo(q);
   const pct=s.i/s.list.length*100;
   const isO=q.a==="o";
@@ -572,12 +574,12 @@ function renderQuiz(){
   const PS=new Set();   // 合格ポイントの中では同じ用語に1回だけ印をつける
   const head=q.h&&!(q.img&&IMG[q.img])?`<p class="qhead2">${gl(esc(q.h))}</p>`:"";
   const sibs=q.past?RAW.filter(x=>x.p===q.p):[];
-  const pt=q.pt?`<div class="ptbox"><div class="label">🎯 合格ポイント</div><p class="pt1">${gl(esc(q.pt.s),PS)}</p>${q.pt.c?`<p class="ptc"><b>覚え方</b>　${gl(esc(q.pt.c),PS)}</p>`:""}${q.pt.r&&q.pt.r.length?`<div class="label" style="margin-top:6px">あわせて出やすいこと</div><ul class="ptr">${q.pt.r.map(x=>`<li>${gl(esc(x),PS)}</li>`).join("")}</ul>`:""}</div>`:"";
+  const pt=q.pt?`<details class="ptwrap"><summary>🎯 合格ポイント（この問題の4つの文 全体のまとめ）を見る</summary><div class="ptbox"><p class="pt1">${gl(esc(q.pt.s),PS)}</p>${q.pt.c?`<p class="ptc"><b>覚え方</b>　${gl(esc(q.pt.c),PS)}</p>`:""}${q.pt.r&&q.pt.r.length?`<div class="label" style="margin-top:6px">あわせて出やすいこと</div><ul class="ptr">${q.pt.r.map(x=>`<li>${gl(esc(x),PS)}</li>`).join("")}</ul>`:""}</div></details>`:"";
   const exp=q.past?`
-    ${pt}
     ${q.e?`<div class="expbox"><div class="label">この文の解説</div><p>${gl(esc(q.e))}</p></div>`:`<div class="expbox"><div class="label">解説</div><p class="muted">この文の解説は準備中です。</p></div>`}
     ${changed(q)?`<div class="lawnote"><strong>法改正で〇×が変わりました（2026年10月1日時点の法律）</strong>${esc(q.law.t)}</div>`:""}
     ${q.law&&q.law.s==="note"?`<div class="lawnote"><strong>法改正メモ</strong>${esc(q.law.t)}</div>`:""}
+    ${pt}
     <details class="sibs"><summary>同じ問題のほかの文（${label(q)}）</summary>
       <ul>${sibs.map(x=>`<li class="${x.id===(q.vid||q.id)?"me":""}"><b class="${x.a==="o"?"tok":"tng"}">${x.a==="o"?"〇":"×"}</b><span>${esc(x.s)}${x.e&&x.id!==(q.vid||q.id)?`<small>${esc(x.e)}</small>`:""}</span></li>`).join("")}</ul>
     </details>
@@ -661,6 +663,8 @@ function answer(q,pick){
   renderQuiz();
 }
 function rate(q,how){
+  // 1問にかかった時間（出題〜次へ）を記録。10分を超えたら席を外していたとみなして記録しない
+  if(session&&session.t0id===q.id){const sec=Math.round((Date.now()-session.t0)/1000);if(sec>=3&&sec<=600){S.tm=S.tm||{b:[],o:[]};const k=q.oyo?"o":"b";S.tm[k].push(sec);S.tm[k]=S.tm[k].slice(-(q.oyo?20:60))}}
   const c=S.cards[q.id]||{b:0,c:0,w:0};
   if(how==="wrong"){c.b=0;c.w++;c.lr="x";c.d=addDays(STEPS[0])}
   else if(how==="unsure"){c.c++;c.lr="o";c.b=1;c.d=addDays(STEPS[0])}
@@ -784,7 +788,6 @@ function voiceAfterRender(q,done){
     if(q.past&&changed(q))txt+="法改正で答えが変わった文です。";
     if(S.my&&S.my[q.id])txt+="自分専用の解説。"+S.my[q.id].t+"。";
     if(q.e)txt+="解説。"+q.e;
-    if(q.pt){txt+="合格ポイント。"+q.pt.s+(q.pt.c?"覚え方。"+q.pt.c:"")+(q.pt.r&&q.pt.r.length?"あわせて出やすいこと。"+q.pt.r.join("。"):"")+"。"}
     txt+=done.ok?"覚えた？ あやしい？":"";
     speak(txt,()=>{
       if(!vOn||!session||!session.answered)return;
@@ -1189,6 +1192,8 @@ function makePlan(){
 }
 function getPlan(){const c=C0();if(!c.plan||c.plan.d!==today()){c.plan=makePlan();save()}return c.plan}
 function planItems(p){const M=AMAP();return p.ids.map(id=>M.get(id)).filter(Boolean)}
+// 1問あたりの時間：自分の最近の記録の中央値（記録が少ないうちは目安：〇×90秒・応用編12分）
+function perQ(){const t=S.tm||{},med=a=>{a=a.slice().sort((x,y)=>x-y);return a[Math.floor(a.length/2)]};return {b:(t.b||[]).length>=10?med(t.b):90,o:(t.o||[]).length>=3?med(t.o):720,nb:(t.b||[]).length,no:(t.o||[]).length}}
 const doneToday=(q,p)=>{const c=card(q.id);return !!(c&&c.t===p.d)};
 function startCourse(){
   const p=getPlan(),pend=planItems(p).filter(q=>!doneToday(q,p));
@@ -1204,7 +1209,7 @@ function courseHTML(){
   const bd=b.filter(q=>doneToday(q,p)).length,od=o.filter(q=>doneToday(q,p)).length;
   const unread=p.th.filter(t=>!C0().read[t]);
   const fin=bd+od===items.length;
-  const min=unread.length*3+Math.ceil((b.length-bd)*0.6)+(o.length-od)*5;
+  const T=perQ(),min=unread.length*3+Math.ceil((b.length-bd)*T.b/60+(o.length-od)*T.o/60);
   const due=dueQ().filter(q=>!p.ids.includes(q.id)).length;
   const names=p.th.map(t=>shortTh(THM[t].n));
   const title=p.mode==="final"?"仕上げモード":names.length?names.slice(0,2).join("・")+(names.length>2?` ほか${names.length-2}`:""):"今日のぶんはありません";
@@ -1222,6 +1227,7 @@ function courseHTML(){
     ${fin?`<p style="margin:0">🎉 今日のぶんは完了です。${p.mode==="final"?"":"このペースで試験日までに全テーマを一周できます。"}</p><button class="btn block" id="goMore">もう少し進む</button>`
       :`<button class="btn primary block" id="goCourse">${bd+od?"続きから":"始める"}（約${Math.max(min,1)}分）</button>`}
     ${due?`<button class="btn block" id="goDue">復習 ${due}問（忘れかけた問題）</button>`:""}
+    <p class="note" style="margin:0">所要時間の目安＝3分レッスン3分×テーマ数＋〇×${perQ().b}秒×問題数＋応用編${Math.round(perQ().o/60)}分×問題数（${perQ().nb>=10?"あなたの最近の実績":"記録がたまるまでの仮の値"}）。</p>
     <p class="note" style="margin:0">${d>=0?`試験日（${S.exam.replace(/-/g,"/")}）から逆算して、1日の量を自動で決めています。やれなかった日があっても、翌日以降に少しずつ振り分け直します。`:"下の「試験日」を入れると、1日の量を自動で決めます。"}</p>
   </section>`;
 }
