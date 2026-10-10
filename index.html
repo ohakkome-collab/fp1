@@ -407,6 +407,9 @@ const siteUrl=q=>`https://fp1-siken.com/kakomon/${q.y}_${q.m}/${String(q.no).pad
 const card=id=>S.cards[id];
 const isDue=id=>{const c=card(id);return c&&c.d<=today()};
 function dueQ(){return ALL().filter(q=>isDue(q.id))}
+// 1日の復習は30問まで。間違えた問題→期限が古い順に出し、残りは翌日以降に回す（先に進む時間を確保するため）
+const REVIEW_CAP=30;
+function dueToday(){const pr=q=>{const c=card(q.id);return (c.lr==="x"?0:1)};return dueQ().sort((a,b)=>pr(a)-pr(b)||(card(a.id).d<card(b.id).d?-1:card(a.id).d>card(b.id).d?1:0)).slice(0,REVIEW_CAP)}
 // パスした問題（あとで調べて解く）。答えると一覧から外れる
 function passQ(){const P=S.pass||{};return ALL().filter(q=>P[q.id]).sort((a,b)=>P[a.id]<P[b.id]?-1:P[a.id]>P[b.id]?1:0)}
 function doPass(q){S.pass=S.pass||{};S.pass[q.id]=S.pass[q.id]||today();save();session.passed=(session.passed||0)+1;session.i++;session.answered=null;renderQuiz();window.scrollTo(0,0)}
@@ -457,7 +460,7 @@ function renderHome(){
   </section>
   <p class="note">全体：定着 ${all.m}問・学習中 ${all.l}問・要復習 ${all.w}問・未着手 ${all.untouched}問（基礎編の〇×と応用編の合計）。「定着」は3回以上続けてできて、復習間隔が7日以上になった問題です。</p>`;
   courseBind();mapBind();
-  V.querySelector("#goDue")?.addEventListener("click",()=>start(dueQ(),"今日の復習"));
+  V.querySelector("#goDue")?.addEventListener("click",()=>start(dueToday(),"今日の復習"));
   V.querySelector("#goPass")?.addEventListener("click",()=>start(passQ(),"パスした問題"));
   V.querySelector("#goStuck")?.addEventListener("click",()=>start(stuckQ(),"つまずいた問題"));
   V.querySelector("#examDate").addEventListener("change",e=>{if(e.target.value){S.exam=e.target.value;C0().plan=null;save();render()}});
@@ -504,7 +507,7 @@ function renderStudy(){
   <section class="card stack">
     <h2>復習・苦手</h2>
     <div class="grid2">
-      <button class="btn" data-set="due">今日の復習<br><span class="muted">${dueQ().length}問</span></button>
+      <button class="btn" data-set="due">今日の復習<br><span class="muted">${dueToday().length}問${dueQ().length>REVIEW_CAP?"（全"+dueQ().length+"問）":""}</span></button>
       <button class="btn" data-set="weak">間違えたことがある<br><span class="muted">${weak.length}問</span></button>
       <button class="btn" data-set="pass">パスした問題<br><span class="muted">${passQ().length}問</span></button>
     </div>
@@ -525,7 +528,7 @@ function renderStudy(){
   V.querySelector("#pr").onchange=e=>{S.pr=e.target.value;save();renderStudy()};
   V.querySelector("#goWords")?.addEventListener("click",()=>{lesson={words:1};render()});
   const freshFirst=l=>{const f=shuffle(l.filter(q=>!card(q.id))),r=shuffle(l.filter(q=>card(q.id)));return f.concat(r).slice(0,20)};
-  const sets={pnew:()=>shuffle(freshP).slice(0,20),prand:()=>shuffle(P).slice(0,50),calc:()=>freshFirst(P.filter(q=>q.img)),chg:()=>P.filter(changed),due:()=>dueQ(),weak:()=>shuffle(weak),pass:()=>passQ(),law:()=>shuffle(Q.filter(q=>q.k)),orig:()=>shuffle(Q),onew:()=>OY.filter(q=>!card(q.id)).slice(0,5),ocalc:()=>shuffle(OY.filter(q=>/計算過程|いくらか|求めなさい/.test(q.t))).slice(0,5),fin:()=>finalItems().slice(0,30)};
+  const sets={pnew:()=>shuffle(freshP).slice(0,20),prand:()=>shuffle(P).slice(0,50),calc:()=>freshFirst(P.filter(q=>q.img)),chg:()=>P.filter(changed),due:()=>dueToday(),weak:()=>shuffle(weak),pass:()=>passQ(),law:()=>shuffle(Q.filter(q=>q.k)),orig:()=>shuffle(Q),onew:()=>OY.filter(q=>!card(q.id)).slice(0,5),ocalc:()=>shuffle(OY.filter(q=>/計算過程|いくらか|求めなさい/.test(q.t))).slice(0,5),fin:()=>finalItems().slice(0,30)};
   const names={pnew:"まだ解いていない問題",prand:"ランダム50問",calc:"計算・資料の問題",chg:"法改正で〇×が変わった問題",due:"今日の復習",weak:"苦手な問題",pass:"パスした問題",law:"法改正",orig:"オリジナル問題",onew:"応用編",ocalc:"応用編（計算）",fin:"仕上げ"};
   V.querySelectorAll("[data-set]").forEach(b=>b.addEventListener("click",()=>{const l=sets[b.dataset.set]();if(l.length)start(l,names[b.dataset.set])}));
   V.querySelectorAll("[data-cat]").forEach(b=>b.addEventListener("click",()=>start(freshFirst(pool.filter(q=>q.c===b.dataset.cat)),CATS[b.dataset.cat])));
@@ -604,7 +607,7 @@ function renderQuiz(){
     ${S.my&&S.my[q.id]&&vset().mode==="off"?`<div class="expbox mine"><div class="label">📝 自分専用の解説（家庭教師の説明を保存）</div><p>${esc(S.my[q.id].t)}</p><button class="btn" id="myDel" style="min-height:34px;font-size:.8rem;padding:2px 10px">この保存を消す</button></div>`:""}
     ${exp}
     ${done.ok?`<div class="label">自信はどのくらい？（次に出る日が変わります）</div>
-      <div class="rate"><button class="btn" data-rate="unsure">あやしい<br><span class="muted">${STEPS[0]}日後</span></button><button class="btn primary" data-rate="sure">覚えた<br><span class="muted" style="color:inherit;opacity:.8">${STEPS[Math.min(((c&&c.b)||0)+1,STEPS.length-1)]}日後</span></button></div>`
+      <div class="rate"><button class="btn" data-rate="unsure">あやしい<br><span class="muted">${STEPS[1]}日後</span></button><button class="btn primary" data-rate="sure">覚えた<br><span class="muted" style="color:inherit;opacity:.8">${STEPS[c?Math.min((c.b||0)+1,STEPS.length-1):2]}日後</span></button></div>`
     :`<button class="btn primary block" data-rate="wrong">次へ（明日もう一度出ます）</button>`}
   </section>`:""}
   ${done?tutorHTML(q):""}`;
@@ -665,10 +668,10 @@ function answer(q,pick){
 function rate(q,how){
   // 1問にかかった時間（出題〜次へ）を記録。10分を超えたら席を外していたとみなして記録しない
   if(session&&session.t0id===q.id){const sec=Math.round((Date.now()-session.t0)/1000);if(sec>=3&&sec<=600){S.tm=S.tm||{b:[],o:[]};const k=q.oyo?"o":"b";S.tm[k].push(sec);S.tm[k]=S.tm[k].slice(-(q.oyo?20:60))}}
-  const c=S.cards[q.id]||{b:0,c:0,w:0};
+  const first=!S.cards[q.id],c=S.cards[q.id]||{b:0,c:0,w:0};
   if(how==="wrong"){c.b=0;c.w++;c.lr="x";c.d=addDays(STEPS[0])}
-  else if(how==="unsure"){c.c++;c.lr="o";c.b=1;c.d=addDays(STEPS[0])}
-  else{c.c++;c.lr="o";c.b=Math.min(c.b+1,STEPS.length-1);c.d=addDays(STEPS[c.b])}
+  else if(how==="unsure"){c.c++;c.lr="o";c.b=1;c.d=addDays(STEPS[1])}
+  else{c.c++;c.lr="o";c.b=first?2:Math.min(c.b+1,STEPS.length-1);c.d=addDays(STEPS[c.b])}   // 初見で正解・覚えた→いきなり7日後
   c.t=today();S.cards[q.id]=c;save();
   session.i++;session.answered=null;renderQuiz();window.scrollTo(0,0);
 }
@@ -1229,7 +1232,7 @@ function courseHTML(){
   const unread=p.th.filter(t=>!C0().read[t]);
   const fin=bd+od===items.length;
   const T=perQ(),min=unread.length*3+Math.ceil((b.length-bd)*T.b/60+(o.length-od)*T.o/60);
-  const due=dueQ().filter(q=>!p.ids.includes(q.id)).length;
+  const dueAll=dueQ().filter(q=>!p.ids.includes(q.id)).length,due=Math.min(dueAll,REVIEW_CAP);
   const names=p.th.map(t=>shortTh(THM[t].n));
   const title=p.mode==="final"?"仕上げモード":names.length?names.slice(0,2).join("・")+(names.length>2?` ほか${names.length-2}`:""):"今日のぶんはありません";
   const li=(ok,t)=>`<li class="${ok?"ok":""}">${ok?"✅ ":""}${t}</li>`;
@@ -1245,7 +1248,7 @@ function courseHTML(){
     </ol>`:""}
     ${fin?`<p style="margin:0">🎉 今日のぶんは完了です。${p.mode==="final"?"":"このペースで試験日までに全テーマを一周できます。"}</p><button class="btn block" id="goMore">もう少し進む</button>`
       :`<button class="btn primary block" id="goCourse">${bd+od?"続きから":"始める"}（約${Math.max(min,1)}分）</button>`}
-    ${due?`<button class="btn block" id="goDue">復習 ${due}問（忘れかけた問題）</button>`:""}
+    ${due?`<button class="btn block" id="goDue">復習 ${due}問（忘れかけた問題）${dueAll>due?`<br><span class="muted">残り${dueAll-due}問は翌日以降に回します</span>`:""}</button>`:""}
     <p class="note" style="margin:0">所要時間の目安＝3分レッスン3分×テーマ数＋〇×${perQ().b}秒×問題数＋応用編${Math.round(perQ().o/60)}分×問題数（${perQ().nb>=10?"あなたの最近の実績":"記録がたまるまでの仮の値"}）。</p>
     <p class="note" style="margin:0">${d>=0?`試験日（${S.exam.replace(/-/g,"/")}）から逆算して、1日の量を自動で決めています。やれなかった日があっても、翌日以降に少しずつ振り分け直します。`:"下の「試験日」を入れると、1日の量を自動で決めます。"}</p>
   </section>`;
@@ -1312,7 +1315,7 @@ function renderOyo(q){
   const prev=s.list[s.i-1],firstOfCase=!prev||prev.case!==q.case;
   const blanks=q.ans.map(([k,a],i)=>{const show=done||s.rev.k.has(i);return `<button class="btn oblank ${show?"on":""}" data-rv="${i}" ${show?"disabled":""}><b>${k||"答"}</b>${show?esc(a):"？"}</button>`}).join("");
   const steps=q.st&&q.st.length?`<div class="ostep"><div class="label">解き方の手順（型紙）</div>${done||s.rev.st?`<ol>${q.st.slice(0,done?q.st.length:s.rev.st).map(x=>`<li>${gl(esc(x),SS)}</li>`).join("")}</ol>`:""}${!done&&s.rev.st<q.st.length?`<button class="btn" id="nstep">${s.rev.st?"次の手順を見る":"ヒント：最初の手順を見る"}（${s.rev.st}/${q.st.length}）</button>`:""}</div>`:"";
-  const nb=Math.min(((c&&c.b)||0)+1,STEPS.length-1);
+  const nb=c?Math.min((c.b||0)+1,STEPS.length-1):2;
   V.innerHTML=`
   <div class="qhead"><span>${esc(s.name)}</span><span>${s.i+1} / ${s.list.length}</span><button class="btn" id="quit" style="min-height:36px;padding:4px 10px;font-size:.8rem">やめる</button></div>
   <div class="progress"><i style="width:${pct}%"></i></div>
@@ -1334,7 +1337,7 @@ function renderOyo(q){
     ${q.lw?`<div class="lawnote"><strong>今の法律では（2026年10月1日時点）</strong>${esc(q.lw)}</div>`:""}
     <details class="imgbox" ${q.e?"":"open"}><summary>模範解答（計算過程つき）を見る</summary>${imgs(q.ak||[])}</details>
     <div class="label">自分で採点（次に出る日が変わります）</div>
-    <div class="rate3"><button class="btn" data-orate="wrong">まちがえた<br><span class="muted">明日</span></button><button class="btn" data-orate="unsure">あやしい<br><span class="muted">明日</span></button><button class="btn primary" data-orate="sure">できた<br><span class="muted" style="color:inherit;opacity:.8">${STEPS[nb]}日後</span></button></div>
+    <div class="rate3"><button class="btn" data-orate="wrong">まちがえた<br><span class="muted">明日</span></button><button class="btn" data-orate="unsure">あやしい<br><span class="muted">${STEPS[1]}日後</span></button><button class="btn primary" data-orate="sure">できた<br><span class="muted" style="color:inherit;opacity:.8">${STEPS[nb]}日後</span></button></div>
     <details class="src"><summary>出典</summary><p>一般社団法人 金融財政事情研究会 ファイナンシャル・プランニング技能検定 1級学科試験（応用編）${q.y}年${q.m}月実施 問${q.no}。問題用紙・模範解答の画像は同会公表のPDFから。解説はこのアプリのオリジナルです。 <a href="https://www.kinzai.or.jp/uploads/lib/question/${q.y}${pad2(q.m)}/fp01_g_oyo.pdf" target="_blank" rel="noopener">原本PDF</a></p></details>
   </section>`:""}
   ${done?tutorHTML(q):""}`;
