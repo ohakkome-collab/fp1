@@ -704,7 +704,7 @@ function renderKako(){
 const PAGES_URL="https://ohakkome-collab.github.io/fp1/";   // 手放しモード用の公開ページ（GitHub Pages）
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 const canSpeak="speechSynthesis" in window;
-const V_DEF={mode:"off",rate:1.2,head:true};
+const V_DEF={mode:"off",rate:1.2,head:true,barge:true};
 const vset=()=>Object.assign({},V_DEF,S.voice||{});
 let vOn=false,vRec=null,vBusy=false,vMicBlocked=false;
 function vClean(t){
@@ -712,22 +712,39 @@ function vClean(t){
     .replace(/（＝保険料負担者）/g,"").replace(/㎡/g,"平方メートル").replace(/～|〜/g,"から")
     .replace(/[（(]以下、「[^」]+」という[)）]/g,"").replace(/\s+/g," ");
 }
-function speak(text,cb){
+/* 読み上げの途中でも「パス」「次」などの短い合図だけは聞き取る（手放しモード）。
+   アプリ自身の声を拾って誤作動しないように、短く言い切った決まった言葉だけを受け付ける */
+let vBarge=null;
+const B_ANY=[[/^(パス|ぱす|pass|スキップ|すきっぷ)$/i,"pass"],[/^(ストップ|すとっぷ|やめて|止めて|とめて|やめる)$/,"stop"],[/^(覚えた|おぼえた|オボエタ|できた|出来た)$/,"sure"],[/^(あやしい|怪しい|アヤシイ)$/,"unsure"],[/^(まちがえた|間違えた|できなかった)$/,"miss"]];
+const B_FIN=[[/^(次|つぎ|ツギ|次へ|つぎへ|ネクスト|next)$/i,"next"],[/^(答え|こたえ|コタエ)$/,"reveal"]];
+function bargeParse(t,fin){t=String(t).replace(/[\s。、．,.!！?？]/g,"");if(!t||t.length>6)return null;for(const[r,w] of B_ANY)if(r.test(t))return w;if(fin)for(const[r,w] of B_FIN)if(r.test(t))return w;return null}
+function bargeStop(){const r=vBarge;vBarge=null;try{r&&r.abort()}catch(e){}}
+function bargeStart(onCmd){
+  if(!onCmd||!SR||vMicBlocked||!vOn||vset().mode!=="free"||vset().barge===false)return;
+  bargeStop();const r=new SR();vBarge=r;r.lang="ja-JP";r.interimResults=true;r.continuous=true;r.maxAlternatives=5;
+  r.onresult=e=>{if(vBarge!==r)return;for(let i=e.resultIndex;i<e.results.length;i++){for(const a of e.results[i]){const w=bargeParse(a.transcript,e.results[i].isFinal);if(w&&onCmd(w))return}}};
+  r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"||e.error==="audio-capture"){vMicBlocked=true;vBarge=null}};
+  r.onend=()=>{if(vBarge===r){try{r.start()}catch(_){vBarge=null}}};   // 読み上げが終わるまで聞き続ける
+  try{r.start()}catch(e){vBarge=null}
+}
+function speak(text,cb,onCmd){
   if(!canSpeak){cb&&cb();return}
-  {const r=vRec;vRec=null;try{r&&r.abort()}catch(e){}}  // 読み上げ中は聞き取りを止める（自分の声を拾わないように）
+  {const r=vRec;vRec=null;try{r&&r.abort()}catch(e){}}  // ふつうの聞き取りは止める（自分の声を拾わないように）
+  bargeStop();
   speechSynthesis.cancel();
   const u=new SpeechSynthesisUtterance(vClean(text));
   u.lang="ja-JP";u.rate=vset().rate;
   const ja=speechSynthesis.getVoices().find(v=>/^ja/i.test(v.lang));if(ja)u.voice=ja;
-  let done=false;const fin=()=>{if(done)return;done=true;cb&&cb()};
+  let done=false;const fin=()=>{if(done)return;done=true;bargeStop();cb&&cb()};
   u.onend=fin;u.onerror=fin;
   speechSynthesis.speak(u);
+  if(onCmd)bargeStart(w=>{if(done)return true;const go=onCmd(w);if(!go)return false;done=true;bargeStop();speechSynthesis.cancel();setTimeout(go,0);return true});
 }
 function vStop(){
   vOn=false;vBusy=false;
   try{canSpeak&&speechSynthesis.cancel()}catch(e){}
   try{vRec&&vRec.abort()}catch(e){}
-  vRec=null;
+  vRec=null;bargeStop();
 }
 // 聞き取った言葉を判定（聞き間違いやすい言い方も広く受け付ける）
 const W_O=/正しい|ただしい|タダシイ|正解|せいかい|あってる|合ってる|あっている|合っている|その通り|そのとおり|まる|マル|丸|〇|○|◯|まーる|マール|はい|ハイ|はーい|イエス|いえす|yes|適切|てきせつ|オッケー|おっけー|^ok$|^o$|^オー$|^王$|^円$|^春$|^猿$|^ある$|^まあ$|^まぁ$|^マー$/i;
@@ -777,24 +794,26 @@ function voiceAfterRender(q,done){
     const txt=q.img
       ?"資料つきの問題です。"+(q.vh||q.h||"")+"では、次の文は正しいか。"+q.q+"。正しい？ 違う？"
       :(v.head&&q.h?q.h+"。":"")+q.q+"。正しい？ 違う？";
+    const qd=s=>session&&!session.answered&&session.list[session.i]===q;
     speak(txt,()=>{
       if(!vOn||session?.answered)return;
       if(v.mode==="free"){vStatus("🎤 聞いています（ゆっくり考えてOK）…「正しい」「ちがう」「わからない」「パス」／「もう一度」で読み直し");listenAnswer(q)}
       else{vStatus("キーボードのマイクで「正しい」か「ちがう」（まる・ばつでもOK）");kbd&&kbd.focus()}
-    });
+    },w=>!qd()?null:w==="pass"?()=>doPass(q):w==="stop"?()=>vEnd():null);
   }else{
     const isO=q.a==="o";
     let txt=(done.ok?"正解。":done.pick==="u"?"わからない、ですね。":"不正解。")+"この文は、"+(isO?"まる":"ばつ")+"です。";
     if(q.past&&changed(q))txt+="法改正で答えが変わった文です。";
     if(q.e)txt+="解説。"+q.e;
     txt+=done.ok?"覚えた？ あやしい？":"";
+    const dd=()=>session&&session.answered===done;
     speak(txt,()=>{
       if(!vOn||!session||!session.answered)return;
       if(v.mode==="free"){
         vStatus(done.ok?"📖 読み終わったら「覚えた」「あやしい」「次」と言ってください（「もう一度」で読み直し・「教えて」で家庭教師）":"📖 読み終わったら「次」と言ってください（「もう一度」で読み直し・「教えて」で家庭教師）");
         waitNext(q,done);
       }else{vStatus(done.ok?"「覚えた」か「あやしい」と入力":"「次」と入力すると進みます");kbd&&kbd.focus()}
-    });
+    },w=>!dd()?null:w==="stop"?()=>vEnd():done.ok?(w==="sure"||w==="next"?()=>rate(q,"sure"):w==="unsure"?()=>rate(q,"unsure"):null):(["next","miss","sure","unsure"].includes(w)?()=>rate(q,"wrong"):null));
   }
 }
 // 解説のあとは、こちらが合図するまで画面を閉じずに待つ
@@ -880,6 +899,7 @@ function voiceSettings(){
     </div>
     <p class="note" style="margin:0">${v.mode==="kbd"?"問題を読み上げます。答えは、入力欄をタップしてキーボードのマイクボタンで「正しい」「ちがう」（まる・ばつ、はい・いいえでもOK）「わからない」「パス」「覚えた」「あやしい」「次」と話してください。「もう一度」で読み直します。":v.mode==="free"?"問題を読み上げ、マイクで「正しい」「ちがう」「わからない」「パス」（まる・ばつ、はい・いいえでもOK）を聞き取って答えます。「もう一度」と言うと読み直します。解説を読み上げたあとは自動では進まないので、読み終わったら「次」（正解なら「覚えた」「あやしい」でも可）と言ってください。「やめる」で止まります。claude.aiの中ではマイクが使えないため、GitHub Pages版で使ってください。":"問題の読み上げや、声で答える機能を使うときに切り替えます。"}</p>
     ${v.mode!=="off"?`<label class="f">読み上げの速さ<select id="vrate">${[[1,"ふつう"],[1.2,"少し速い"],[1.5,"速い"],[1.8,"とても速い"]].map(([r,t])=>`<option value="${r}" ${v.rate==r?"selected":""}>${t}</option>`).join("")}</select></label>
+    ${v.mode==="free"?`<label class="chk"><input type="checkbox" id="vbarge" ${v.barge!==false?"checked":""}> 読み上げの途中でも「パス」「次」「覚えた」「あやしい」「答え」「ストップ」を聞き取る</label>`:""}
     <label class="chk"><input type="checkbox" id="vhead" ${v.head?"checked":""}> 問いかけ（〜に関する次の内容は適切か）も読む</label>`:""}
     ${v.mode==="free"&&!SR?`<p class="note" style="margin:0;color:var(--ng)">このブラウザは音声の聞き取りに対応していません。スマホのSafariかChromeで開いてください。</p>`:""}
     ${PAGES_URL?`<a class="btn" href="${PAGES_URL}" target="_blank" rel="noopener">手放しモード用（GitHub Pages版）を開く ↗</a>`:""}
@@ -888,6 +908,7 @@ function voiceSettings(){
 function voiceSettingsBind(){
   V.querySelectorAll('input[name="vmode"]').forEach(r=>r.addEventListener("change",()=>{S.voice=Object.assign(vset(),{mode:r.value});vStop();save();render()}));
   V.querySelector("#vrate")?.addEventListener("change",e=>{S.voice=Object.assign(vset(),{rate:Number(e.target.value)});save()});
+  V.querySelector("#vbarge")?.addEventListener("change",e=>{S.voice=Object.assign(vset(),{barge:e.target.checked});save()});
   V.querySelector("#vhead")?.addEventListener("change",e=>{S.voice=Object.assign(vset(),{head:e.target.checked});save()});
 }
 
@@ -1338,14 +1359,14 @@ function oyoVoice(q,done){
       if(!vOn||session?.answered)return;
       if(v.mode==="free"){vStatus("🎤 「答え」で答えを表示・「パス」で後回し・「もう一度」で読み直し");oyoListen(q,null)}
       else{vStatus("「答え」と入力すると答えを表示します");document.getElementById("vin")?.focus()}
-    });
+    },w=>session&&!session.answered&&session.list[session.i]===q?(w==="pass"?()=>doPass(q):w==="reveal"||w==="next"?()=>oyoShow(q):w==="stop"?()=>vEnd():null):null);
   }else{
     const t="答えです。"+q.ans.map(([k,a])=>(k?k+"、":"")+a).join("。")+"。"+(q.e?"解説。"+q.e+"。":"")+(q.lw?"今の法律では。"+q.lw+"。":"")+"できた？ あやしい？ まちがえた？";
     speak(t,()=>{
       if(!vOn||!session||!session.answered)return;
       if(v.mode==="free"){vStatus("📖 「できた」「あやしい」「まちがえた」と言ってください（「もう一度」で読み直し・「教えて」で家庭教師）");oyoListen(q,done)}
       else{vStatus("「できた」「あやしい」「まちがえた」と入力");document.getElementById("vin")?.focus()}
-    });
+    },w=>session&&session.answered===done&&["sure","unsure","next","miss","stop"].includes(w)?()=>oyoWord(q,done,w):null);
   }
 }
 function oyoWord(q,done,w){
