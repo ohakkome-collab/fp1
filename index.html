@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<html lang="ja"><head><meta charset="utf-8"><meta http-equiv="Cache-Control" content="no-cache"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
 <title>FP1級 合格ノート</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Zen+Old+Mincho:wght@700;900&display=swap">
@@ -574,7 +574,7 @@ function renderQuiz(){
   const PS=new Set();   // 合格ポイントの中では同じ用語に1回だけ印をつける
   const head=q.h&&!(q.img&&IMG[q.img])?`<p class="qhead2">${gl(esc(q.h))}</p>`:"";
   const sibs=q.past?RAW.filter(x=>x.p===q.p):[];
-  const pt=q.pt?`<details class="ptwrap"><summary>🎯 合格ポイント（この問題の4つの文 全体のまとめ）を見る</summary><div class="ptbox"><p class="pt1">${gl(esc(q.pt.s),PS)}</p>${q.pt.c?`<p class="ptc"><b>覚え方</b>　${gl(esc(q.pt.c),PS)}</p>`:""}${q.pt.r&&q.pt.r.length?`<div class="label" style="margin-top:6px">あわせて出やすいこと</div><ul class="ptr">${q.pt.r.map(x=>`<li>${gl(esc(x),PS)}</li>`).join("")}</ul>`:""}</div></details>`:"";
+  const pt=q.pt&&vset().mode==="off"?`<details class="ptwrap"><summary>🎯 合格ポイント（この問題の4つの文 全体のまとめ）を見る</summary><div class="ptbox"><p class="pt1">${gl(esc(q.pt.s),PS)}</p>${q.pt.c?`<p class="ptc"><b>覚え方</b>　${gl(esc(q.pt.c),PS)}</p>`:""}${q.pt.r&&q.pt.r.length?`<div class="label" style="margin-top:6px">あわせて出やすいこと</div><ul class="ptr">${q.pt.r.map(x=>`<li>${gl(esc(x),PS)}</li>`).join("")}</ul>`:""}</div></details>`:"";
   const exp=q.past?`
     ${q.e?`<div class="expbox"><div class="label">この文の解説</div><p>${gl(esc(q.e))}</p></div>`:`<div class="expbox"><div class="label">解説</div><p class="muted">この文の解説は準備中です。</p></div>`}
     ${changed(q)?`<div class="lawnote"><strong>法改正で〇×が変わりました（2026年10月1日時点の法律）</strong>${esc(q.law.t)}</div>`:""}
@@ -923,7 +923,6 @@ function tutorContext(q){
 ${q.vh?"【資料の内容】"+q.vh+"\n":""}【いま出題した文】${q.q}
 【正解】${q.a==="o"?"〇（正しい）":"×（誤り）"}
 【アプリの解説】${q.e||"なし"}
-${q.pt?"【合格ポイント】"+q.pt.s+" 覚え方："+(q.pt.c||"")+" あわせて出やすいこと："+(q.pt.r||[]).join("／")+"\n":""}
 ${q.law&&q.law.t?"【法改正メモ】"+q.law.t+"\n":""}${sib?"【同じ問題のほかの文】\n"+sib:""}`;
 }
 // 時間切れつきの通信（返事が来ないまま待ち続けないように）
