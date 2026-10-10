@@ -337,7 +337,7 @@ async function initCloud(){
       const remote=snap.data();
       // 回答数が多い方を採用（端末とクラウドのずれ対策）
       const cnt=o=>Object.values(o.cards||{}).reduce((s,c)=>s+(c.c||0)+(c.w||0),0)+Object.values(o.pq||{}).reduce((s,c)=>s+(c.c||0)+(c.w||0),0)+(o.kako||[]).length;
-      if(cnt(remote)>=cnt(S)){S=Object.assign({cards:{},kako:[],pq:{},pr:"r12",pc:"",exam:S.exam,log:{}},JSON.parse(JSON.stringify(remote)));migrate();if(pqState==="ok")migrateGroups();saveLocal()}
+      if(cnt(remote)>=cnt(S)){S=Object.assign({cards:{},kako:[],pq:{},pr:"r12",pc:"",exam:S.exam,log:{}},JSON.parse(JSON.stringify(remote)));migrate();if(!S.myClr){S.my={};S.myClr=1}if(pqState==="ok")migrateGroups();saveLocal()}
       else flush();
     }else if(Object.keys(S.cards).length||Object.keys(S.pq).length){flush()}
     setSync("クラウドに保存済み");
@@ -601,7 +601,7 @@ function renderQuiz(){
   </section>
   ${done?`<section class="card stack">
     <div class="verdict"><div class="stamp ${done.ok?"ok":done.pick==="u"?"uk":"ng"}">${done.ok?"正":done.pick==="u"?"？":"誤"}</div><div><strong>${done.ok?"正解":done.pick==="u"?"わからない":"不正解"}</strong><div class="muted">この文は ${isO?"〇（正しい）":"×（誤り）"}</div></div></div>
-    ${S.my&&S.my[q.id]?`<div class="expbox mine"><div class="label">📝 自分専用の解説（家庭教師の説明を保存）</div><p>${esc(S.my[q.id].t)}</p><button class="btn" id="myDel" style="min-height:34px;font-size:.8rem;padding:2px 10px">この保存を消す</button></div>`:""}
+    ${S.my&&S.my[q.id]&&vset().mode==="off"?`<div class="expbox mine"><div class="label">📝 自分専用の解説（家庭教師の説明を保存）</div><p>${esc(S.my[q.id].t)}</p><button class="btn" id="myDel" style="min-height:34px;font-size:.8rem;padding:2px 10px">この保存を消す</button></div>`:""}
     ${exp}
     ${done.ok?`<div class="label">自信はどのくらい？（次に出る日が変わります）</div>
       <div class="rate"><button class="btn" data-rate="unsure">あやしい<br><span class="muted">${STEPS[0]}日後</span></button><button class="btn primary" data-rate="sure">覚えた<br><span class="muted" style="color:inherit;opacity:.8">${STEPS[Math.min(((c&&c.b)||0)+1,STEPS.length-1)]}日後</span></button></div>`
@@ -786,7 +786,6 @@ function voiceAfterRender(q,done){
     const isO=q.a==="o";
     let txt=(done.ok?"正解。":done.pick==="u"?"わからない、ですね。":"不正解。")+"この文は、"+(isO?"まる":"ばつ")+"です。";
     if(q.past&&changed(q))txt+="法改正で答えが変わった文です。";
-    if(S.my&&S.my[q.id])txt+="自分専用の解説。"+S.my[q.id].t+"。";
     if(q.e)txt+="解説。"+q.e;
     txt+=done.ok?"覚えた？ あやしい？":"";
     speak(txt,()=>{
@@ -1393,7 +1392,7 @@ function renderLaw(){
 
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{vStop();session=null;lesson=null;tab=b.dataset.tab;render()}));
 document.addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(g){tab=g.dataset.go;render()}});
-loadLocal();migrate();render();initCloud();loadPast();
+loadLocal();migrate();if(!S.myClr){S.my={};S.myClr=1;saveLocal()}render();initCloud();loadPast();
 </script>
 
 </body></html>
