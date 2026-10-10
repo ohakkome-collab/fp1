@@ -794,7 +794,13 @@ function voiceAfterRender(q,done){
   if(q.oyo)return oyoVoice(q,done);
   const kbd=document.getElementById("vin");
   if(!done){
-    const txt=q.img
+    // 同じ問題（同じ前提）の文が続くときは、前提は最初の1回だけ読む（同じ文を読み直すときは全部読む）
+    const again=session.qSpoken===q.id;session.qSpoken=q.id;
+    const cont=!again&&q.p&&session.headP===q.p&&session.headId!==q.id;
+    if(!cont){session.headP=q.p;session.headId=q.id}
+    const txt=cont
+      ?"同じ問題の続き。"+q.q+"。正しい？ 違う？"
+      :q.img
       ?"資料つきの問題です。"+(q.vh||q.h||"")+"では、次の文は正しいか。"+q.q+"。正しい？ 違う？"
       :(v.head&&q.h?q.h+"。":"")+q.q+"。正しい？ 違う？";
     const qd=s=>session&&!session.answered&&session.list[session.i]===q;
