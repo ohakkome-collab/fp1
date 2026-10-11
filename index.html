@@ -562,8 +562,10 @@ function renderQuiz(){
       <p class="muted" style="margin:0">${s.ok+s.ng?"正答率 "+Math.round(s.ok/(s.ok+s.ng)*100)+"％。":""}間違えた問題は明日もう一度出題されます。</p>
       ${s.name==="今日のレッスン"||s.name==="仕上げ"?`<p style="margin:0">${(()=>{const p=getPlan();return p.th.filter(t=>thStat(t).st==="done"||thStat(t).st==="mast").map(t=>"「"+shortTh(THM[t].n)+"」").join("")})()||""}${getPlan().th.some(t=>["done","mast"].includes(thStat(t).st))?"を一周しました！":""}</p>`:""}
     </section>
-    <button class="btn primary block" id="back">ホームに戻る</button>`;
+    ${s.then?`<button class="btn primary block" id="thenGo">続き：新しいテーマの3分レッスンへ</button>`:""}
+    <button class="btn ${s.then?"":"primary "}block" id="back">ホームに戻る</button>`;
     V.querySelector("#back").onclick=()=>{session=null;tab="home";render()};
+    V.querySelector("#thenGo")?.addEventListener("click",()=>{vStop();const f=s.then;session=null;f()});
     if(vOn)speak("おつかれさまでした。"+(s.ok+s.ng)+"問中、"+s.ok+"問正解です。",()=>vStop());
     return;
   }
@@ -1227,6 +1229,9 @@ function startCourse(){
   const p=getPlan(),pend=planItems(p).filter(q=>!doneToday(q,p));
   const unread=p.th.filter(t=>!C0().read[t]);
   const go=()=>{if(pend.length)start(pend,p.mode==="final"?"仕上げ":"今日のレッスン");else{lesson=null;render()}};
+  // レッスンを読み終えたテーマの残り（昨日の続きなど）を先に解き、そのあと新しいテーマのレッスンへ
+  const old=pend.filter(q=>!unread.includes(q.th));
+  if(unread.length&&old.length){start(old,"今日のレッスン");session.then=startCourse;return}
   if(unread.length){lesson={queue:unread,i:0,then:go};render();return}
   go();
 }
