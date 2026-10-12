@@ -742,8 +742,6 @@ const B_FIN=[[/^(次|つぎ|ツギ|次へ|つぎへ|ネクスト|next)$/i,"next"
   [/^(違う|ちがう|チガウ|違います|ちがいます|ばつ|バツ|罰|ぺけ|誤り|あやまり|不適切)$/,"x"],
   [/^(わからない|分からない|わかんない|分かんない|わかりません)$/,"unknown"],
   [/^(教えて|おしえて|教えてください|先生|せんせい|家庭教師|質問)$/,"tutor"]];
-// 読み上げ中に聞き取るときは、最後の問いかけ（「正しい？違う？」など）を自分で拾わないよう言い方を変える
-const bargeOn=()=>!!SR&&!vMicBlocked&&vset().mode==="free"&&vset().barge!==false;
 function bargeParse(t,fin){t=String(t).replace(/[\s。、．,.!！?？]/g,"");if(!t||t.length>6)return null;for(const[r,w] of B_ANY)if(r.test(t))return w;if(fin)for(const[r,w] of B_FIN)if(r.test(t))return w;return null}
 function bargeStop(){const r=vBarge;vBarge=null;try{r&&r.abort()}catch(e){}}
 function bargeStart(onCmd){
@@ -822,7 +820,7 @@ function voiceAfterRender(q,done){
     const again=session.qSpoken===q.id;session.qSpoken=q.id;
     const cont=!again&&q.p&&session.headP===q.p&&session.headId!==q.id;
     if(!cont){session.headP=q.p;session.headId=q.id}
-    const ask=bargeOn()?"。どっち？":"。正しい？ 違う？";
+    const ask="。正しい？ 違う？";
     const txt=cont
       ?"同じ問題の続き。"+q.q+ask
       :q.img
@@ -839,7 +837,7 @@ function voiceAfterRender(q,done){
     let txt=(done.ok?"正解。":done.pick==="u"?"わからない、ですね。":"不正解。")+"この文は、"+(isO?"まる":"ばつ")+"です。";
     if(q.past&&changed(q))txt+="法改正で答えが変わった文です。";
     if(q.e)txt+="解説。"+q.e;
-    txt+=done.ok?(bargeOn()?"どうだった？":"覚えた？ あやしい？"):"";
+    txt+=done.ok?"覚えた？ あやしい？":"";
     const dd=()=>session&&session.answered===done;
     speak(txt,()=>{
       if(!vOn||!session||!session.answered)return;
@@ -1485,7 +1483,7 @@ function oyoVoice(q,done){
     const num=x.k.charCodeAt(0)-0x245f;
     if(r.k.has(x.i)){
       // 答えを読んで「合ってた？」と聞く
-      speak(num+"番の答えは。"+noP(q.ans[x.i][1])+(bargeOn()?"。どうだった？":"。合ってた？ 間違えた？"),()=>{
+      speak(num+"番の答えは。"+noP(q.ans[x.i][1])+"。合ってた？ 間違えた？",()=>{
         if(!vOn||!here())return;
         if(v.mode==="free"){vStatus("🎤 「合ってた」「間違えた」と言ってください");oyoListen(q,null)}
         else{vStatus("「合ってた」「間違えた」と入力");document.getElementById("vin")?.focus()}
@@ -1518,7 +1516,7 @@ function oyoVoice(q,done){
       speak(t,()=>{if(vOn&&session&&session.answered===done)oyoFinish(q)},w=>!(session&&session.answered===done)?null:["next","sure","pass"].includes(w)?()=>oyoFinish(q):w==="tutor"?()=>tutorVoice(q,done,true):w==="stop"?()=>vEnd():null);
       return;
     }
-    const t=(done.step?"":"答えです。"+q.ans.map(([k,a])=>(k?k+"、":"")+a).join("。")+"。")+(q.e?"解説。"+q.e+"。":"")+(q.lw?"今の法律では。"+q.lw+"。":"")+(bargeOn()?"どうだった？":"できた？ あやしい？ まちがえた？");
+    const t=(done.step?"":"答えです。"+q.ans.map(([k,a])=>(k?k+"、":"")+a).join("。")+"。")+(q.e?"解説。"+q.e+"。":"")+(q.lw?"今の法律では。"+q.lw+"。":"")+"できた？ あやしい？ まちがえた？";
     speak(t,()=>{
       if(!vOn||!session||!session.answered)return;
       if(v.mode==="free"){vStatus("📖 「できた」「あやしい」「まちがえた」と言ってください（「もう一度」で読み直し・「教えて」で家庭教師）");oyoListen(q,done)}
