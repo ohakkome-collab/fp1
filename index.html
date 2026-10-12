@@ -1386,7 +1386,9 @@ function oyoAdv(q,ok){
   if(ok===undefined)return;
   r.res[x.i]=ok;
   if(r.cur+1<P.length){r.cur++;renderQuiz();window.scrollTo(0,0);return}
-  oyoShow(q);
+  // 空欄ごとに答えを見ているので、最後にまとめて解説は出さずにそのまま次の問題へ
+  if(S.pass&&S.pass[q.id])delete S.pass[q.id];
+  oyoFinish(q);
 }
 function oyoFinish(q){const r=session.rev,x=Object.values(r.res).some(v=>!v);oyoRate(q,x?"wrong":"sure",r.res)}
 function renderOyo(q){
@@ -1452,6 +1454,7 @@ function renderOyoStep(q,P){
     <p class="qtext">${x.b?oyoFill(q,x.s,x.i):esc(x.s)}</p>
     ${x.b?oyoAppx(q).filter(a=>!a.k||a.k===x.k).map(a=>`<div class="ostep"><div class="label">${esc(a.h.replace(/^[〈＜《]|[〉＞》]$/g,"")||"資料")}</div><p class="qtext" style="font-size:.92rem">${esc(a.body)}</p></div>`).join(""):""}
     ${shown?`<div class="oans"><b>${esc(x.k)}</b> ${esc(a)}</div>`:""}
+    ${shown&&(q.e||q.lw)?`<details class="imgbox"><summary>解説を見る（必要なときだけ）</summary>${q.e?`<p style="margin:6px 0">${esc(q.e)}</p>`:""}${q.lw?`<div class="lawnote"><strong>今の法律では</strong>${esc(q.lw)}</div>`:""}</details>`:""}
     ${shown?`<div class="grid2"><button class="btn" data-ores="0">✕ まちがえた<br><span class="muted">明日もう一度</span></button><button class="btn primary" data-ores="1">〇 合ってた<br><span class="muted" style="color:inherit;opacity:.8">しばらく出ません</span></button></div>`
       :`<button class="btn primary block" id="oadv">答えを見る</button>`}
     <details class="imgbox" ${x.b?"":"open"}><summary>${x.b?"問題文の全体を見る":"問題文と資料"}</summary><p class="qtext" style="font-size:.95rem">${oyoFill(q,q.t,x.i)}</p></details>
@@ -1477,7 +1480,7 @@ function oyoVoice(q,done){
   const P=!done&&session.rev&&session.rev.list;
   if(P){
     const r=session.rev,x=P[r.cur],here=()=>session&&!session.answered&&session.list[session.i]===q&&session.rev===r&&P[r.cur]===x;
-    const noP=t=>String(t).replace(/[（(][^（）()]*[)）]/g,"");   // 答えの括弧（単位など）は読まない
+    const noP=t=>String(t).replace(/[（(][^（）()]*[)）]\s*$/,"");   // 答えの最後に付く単位の括弧（円）（床）だけ読まない。途中の括弧は正式な答えの一部なので消さない
     const plain=t=>oyoSay({t:t.replace(/（\s*([①-⑳])\s*）/g,(m,k)=>{const i=q.ans.findIndex(a=>a[0]===k);return r.k.has(i)?noP(q.ans[i][1]):m})});
     const num=x.k.charCodeAt(0)-0x245f;
     if(r.k.has(x.i)){
