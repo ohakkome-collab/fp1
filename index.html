@@ -670,13 +670,22 @@ function answer(q,pick){
   S.log[today()]=(S.log[today()]||0)+1;
   renderQuiz();
 }
-function rate(q,how){
+function rate(q,how,res){
   // 1問にかかった時間（出題〜次へ）を記録。10分を超えたら席を外していたとみなして記録しない
   if(session&&session.t0id===q.id){const sec=Math.round((Date.now()-session.t0)/1000);if(sec>=3&&sec<=600){S.tm=S.tm||{b:[],o:[]};const k=q.oyo?"o":"b";S.tm[k].push(sec);S.tm[k]=S.tm[k].slice(-(q.oyo?20:60))}}
   const first=!S.cards[q.id],c=S.cards[q.id]||{b:0,c:0,w:0};
   if(how==="wrong"){c.b=0;c.w++;c.lr="x";c.d=addDays(STEPS[0])}
   else if(how==="unsure"){c.c++;c.lr="o";c.b=1;c.d=addDays(STEPS[1])}
   else{c.c++;c.lr="o";c.b=first?2:Math.min(c.b+1,STEPS.length-1);c.d=addDays(STEPS[c.b])}   // 初見で正解・覚えた→いきなり7日後
+  if(res&&Object.keys(res).length){
+    // 応用編は空欄ごとに次に出す日を決める。問題全体の期限は、いちばん早い空欄に合わせる
+    const n=q.ans.length;c.bb=(c.bb||[]).slice(0,n);c.bd=(c.bd||[]).slice(0,n);
+    for(let i=0;i<n;i++){
+      if(i in res){c.bb[i]=res[i]?(c.bb[i]==null?2:Math.min(c.bb[i]+1,STEPS.length-1)):0;c.bd[i]=addDays(STEPS[c.bb[i]])}
+      else if(c.bd[i]==null){c.bb[i]=c.b;c.bd[i]=c.d}
+    }
+    c.d=c.bd.reduce((m,d)=>d<m?d:m);c.b=Math.min(...c.bb);
+  }
   c.t=today();S.cards[q.id]=c;save();
   session.i++;session.answered=null;renderQuiz();window.scrollTo(0,0);
 }
@@ -718,12 +727,16 @@ let vOn=false,vRec=null,vBusy=false,vMicBlocked=false;
 function vClean(t){
   return String(t).replace(/〇|○/g,"まる").replace(/×/g,"ばつ").replace(/答え：/,"答えは、")
     .replace(/（＝保険料負担者）/g,"").replace(/㎡/g,"平方メートル").replace(/～|〜/g,"から")
-    .replace(/[（(]以下、「[^」]+」という[)）]/g,"").replace(/\s+/g," ");
+    .replace(/[（(]以下、「[^」]+」という[)）]/g,"")
+    .replace(/[（(][^（）()0-9０-９]{1,4}[)）]/g,"")   // （日）（床）（円）などの単位の括弧は読まない（「曜日」などと誤読するため）
+    .replace(/空欄\s*([①-⑳])/g,(m,c)=>"空欄"+(c.charCodeAt(0)-0x245f)+"番、").replace(/[①-⑳]/g,c=>"、"+(c.charCodeAt(0)-0x245f)+"番、")   // 丸数字は「5番」と区切って読む（後ろの数字とつながらないように）
+    .replace(/([。、])、+/g,"$1").replace(/、。/g,"。").replace(/^、/,"")
+    .replace(/\s+/g," ");
 }
 /* 読み上げの途中でも「パス」「次」などの短い合図だけは聞き取る（手放しモード）。
    アプリ自身の声を拾って誤作動しないように、短く言い切った決まった言葉だけを受け付ける */
 let vBarge=null;
-const B_ANY=[[/^(パス|ぱす|pass|スキップ|すきっぷ)$/i,"pass"],[/^(ストップ|すとっぷ|やめて|止めて|とめて|やめる)$/,"stop"],[/^(覚えた|おぼえた|オボエタ|できた|出来た)$/,"sure"],[/^(あやしい|怪しい|アヤシイ)$/,"unsure"],[/^(まちがえた|間違えた|できなかった)$/,"miss"]];
+const B_ANY=[[/^(パス|ぱす|pass|スキップ|すきっぷ)$/i,"pass"],[/^(ストップ|すとっぷ|やめて|止めて|とめて|やめる)$/,"stop"],[/^(覚えた|おぼえた|オボエタ|できた|出来た|合ってた|あってた|正解|せいかい)$/,"sure"],[/^(あやしい|怪しい|アヤシイ)$/,"unsure"],[/^(まちがえた|間違えた|できなかった|間違い|まちがい|不正解)$/,"miss"]];
 const B_FIN=[[/^(次|つぎ|ツギ|次へ|つぎへ|ネクスト|next)$/i,"next"],[/^(答え|こたえ|コタエ)$/,"reveal"]];
 function bargeParse(t,fin){t=String(t).replace(/[\s。、．,.!！?？]/g,"");if(!t||t.length>6)return null;for(const[r,w] of B_ANY)if(r.test(t))return w;if(fin)for(const[r,w] of B_FIN)if(r.test(t))return w;return null}
 function bargeStop(){const r=vBarge;vBarge=null;try{r&&r.abort()}catch(e){}}
@@ -755,7 +768,7 @@ function vStop(){
   vRec=null;bargeStop();
 }
 // 聞き取った言葉を判定（聞き間違いやすい言い方も広く受け付ける）
-const W_O=/正しい|ただしい|タダシイ|正解|せいかい|あってる|合ってる|あっている|合っている|その通り|そのとおり|まる|マル|丸|〇|○|◯|まーる|マール|はい|ハイ|はーい|イエス|いえす|yes|適切|てきせつ|オッケー|おっけー|^ok$|^o$|^オー$|^王$|^円$|^春$|^猿$|^ある$|^まあ$|^まぁ$|^マー$/i;
+const W_O=/あってた|合ってた|正しい|ただしい|タダシイ|正解|せいかい|あってる|合ってる|あっている|合っている|その通り|そのとおり|まる|マル|丸|〇|○|◯|まーる|マール|はい|ハイ|はーい|イエス|いえす|yes|適切|てきせつ|オッケー|おっけー|^ok$|^o$|^オー$|^王$|^円$|^春$|^猿$|^ある$|^まあ$|^まぁ$|^マー$/i;
 const W_X=/違う|ちがう|チガウ|違います|ちがいます|間違|まちが|マチガ|ばつ|バツ|罰|ぺけ|ペケ|×|✕|✖|いいえ|イイエ|いえ$|ノー|^no$|ダメ|だめ|駄目|不適切|ふてきせつ|誤り|あやまり|不正解|^抜|^伐|^ばっ|^バッ|^発$|^八$|^パツ$/i;
 function vParse(t){
   t=String(t).replace(/[\s。、．,.!！?？]/g,"");
@@ -1175,7 +1188,7 @@ async function loadOyo(){
 // 応用編の問題用紙・模範解答の画像（試験回ごとに必要になったときだけ読む）
 function oimg(q){
   const ex=q.y+"_"+q.m;if(OIMG[ex])return OIMG[ex];
-  if(!oimgLoading[ex])oimgLoading[ex]=fetch("oimg_"+ex+".json").then(r=>r.ok?r.json():{}).catch(()=>({})).then(j=>{OIMG[ex]=j;const c=session&&session.list[session.i];if(c&&c.oyo&&c.y+"_"+c.m===ex)renderQuiz()});
+  if(!oimgLoading[ex])oimgLoading[ex]=fetch("oimg_"+ex+".json").then(r=>r.ok?r.json():{}).catch(()=>({})).then(j=>{OIMG[ex]=j;const c=session&&session.list[session.i];if(c&&c.oyo&&c.y+"_"+c.m===ex)renderOyoKeep(c)});   // 画像が届いても読み上げはやり直さない
   return null;
 }
 const oyoLabel=q=>`${q.y}年${q.m}月 応用編 問${q.no}`;
@@ -1328,12 +1341,12 @@ function oyoParts(q){
   for(const [k] of q.ans){
     if(!k)return null;
     const re=new RegExp("（\\s*"+k+"\\s*）"),i=sents.findIndex(x=>re.test(x));
-    if(i>=0){out.push({k,b:1,pre:i>0&&!/^[〈《【〔]/.test(sents[i-1])?sents[i-1]:"",s:sents[i]});continue}
+    if(i>=0){out.push({i:out.length,k,b:1,pre:i>0&&!/^[〈《【〔]/.test(sents[i-1])?sents[i-1]:"",s:sents[i]});continue}
     const ln=lines.find(l=>new RegExp("^\\s*"+k+"\\s").test(l));
-    if(ln){out.push({k,b:0,s:ln.trim()});continue}
+    if(ln){out.push({i:out.length,k,b:0,s:ln.trim()});continue}
     // 「①○○と②△△を求めなさい」のように1文に並んでいるとき
     const m=flat.match(new RegExp(k+"([^①-⑳。]*?)(?=[①-⑳]|を、それぞれ|を求め|。|$)"));
-    if(m&&m[1].trim()){out.push({k,b:0,s:k+" "+m[1].replace(/(および|と|、|，)\s*$/,"").trim()+"を求めなさい。"});continue}
+    if(m&&m[1].trim()){out.push({i:out.length,k,b:0,s:k+" "+m[1].replace(/(および|と|、|，)\s*$/,"").trim()+"を求めなさい。"});continue}
     return null;
   }
   return out;
@@ -1344,18 +1357,28 @@ function oyoFill(q,txt,cur){
   q.ans.forEach(([k,a],i)=>{h=h.replace(new RegExp("（\\s*"+k+"\\s*）","g"),m=>session.rev.k.has(i)?`<mark>${esc(a)}</mark>`:i===cur?`<b class="ocur">（ ${k} ）</b>`:m)});
   return h;
 }
-function oyoAdv(q){
-  const s=session,r=s.rev,P=oyoParts(q);
+// 復習のときは、期限が来た空欄（前回まちがえた空欄）だけを出す
+function oyoActive(q,P){
+  const c=card(q.id);if(!c||!c.bd||c.bd.length!==P.length)return P;
+  const due=P.filter(x=>!c.bd[x.i]||c.bd[x.i]<=today());
+  return due.length&&due.length<P.length?due:P;
+}
+// ok：undefined＝答えを見る、true/false＝合ってた/まちがえた を記録して次へ
+function oyoAdv(q,ok){
+  const s=session,r=s.rev,P=r.list;
   if(!P){oyoShow(q);return}
-  if(!r.k.has(r.cur)){r.k.add(r.cur);renderQuiz();return}
+  const x=P[r.cur];
+  if(!r.k.has(x.i)){r.k.add(x.i);renderQuiz();return}
+  if(ok===undefined)return;
+  r.res[x.i]=ok;
   if(r.cur+1<P.length){r.cur++;renderQuiz();window.scrollTo(0,0);return}
   oyoShow(q);
 }
+function oyoFinish(q){const r=session.rev,x=Object.values(r.res).some(v=>!v);oyoRate(q,x?"wrong":"sure",r.res)}
 function renderOyo(q){
   const s=session,done=s.answered,c=card(q.id),IM=oimg(q),cs=OYC[q.case]||{pg:[],t:""};
-  if(!s.rev||s.rev.id!==q.id)s.rev={id:q.id,k:new Set(),st:0,cur:0};
-  const P=done?null:oyoParts(q);
-  if(P)return renderOyoStep(q,P);
+  if(!s.rev||s.rev.id!==q.id){const P=oyoParts(q);s.rev={id:q.id,k:new Set(),st:0,cur:0,res:{},list:P&&oyoActive(q,P),all:P?P.length:0}}
+  if(!done&&s.rev.list)return renderOyoStep(q,s.rev.list);
   const pct=s.i/s.list.length*100,SS=new Set(),th=THM[q.th];
   const imgs=keys=>IM?keys.map(k=>IM[k]?`<img class="qimg" src="${IM[k]}" alt="問題用紙の画像" loading="lazy">`:"").join(""):`<p class="note">画像を読み込んでいます…</p>`;
   const qpg=q.pg.filter(p=>!cs.pg.includes(p));
@@ -1383,8 +1406,8 @@ function renderOyo(q){
     ${q.e?`<div class="expbox"><div class="label">解説</div><p>${gl(esc(q.e))}</p></div>`:""}
     ${q.lw?`<div class="lawnote"><strong>今の法律では（2026年10月1日時点）</strong>${esc(q.lw)}</div>`:""}
     <details class="imgbox" ${q.e?"":"open"}><summary>模範解答（計算過程つき）を見る</summary>${imgs(q.ak||[])}</details>
-    <div class="label">自分で採点（次に出る日が変わります）</div>
-    <div class="rate3"><button class="btn" data-orate="wrong">まちがえた<br><span class="muted">明日</span></button><button class="btn" data-orate="unsure">あやしい<br><span class="muted">${STEPS[1]}日後</span></button><button class="btn primary" data-orate="sure">できた<br><span class="muted" style="color:inherit;opacity:.8">${STEPS[nb]}日後</span></button></div>
+    ${done.step?(()=>{const v=Object.values(s.rev.res),o=v.filter(Boolean).length,x=v.length-o;return `<p style="margin:0">〇 ${o}　✕ ${x}　${x?"→ ✕の空欄だけ明日もう一度出します":"→ 全部合っていました"}</p><button class="btn primary block" id="ofin">次の問題へ</button>`})():`<div class="label">自分で採点（次に出る日が変わります）</div>
+    <div class="rate3"><button class="btn" data-orate="wrong">まちがえた<br><span class="muted">明日</span></button><button class="btn" data-orate="unsure">あやしい<br><span class="muted">${STEPS[1]}日後</span></button><button class="btn primary" data-orate="sure">できた<br><span class="muted" style="color:inherit;opacity:.8">${STEPS[nb]}日後</span></button></div>`}
     <details class="src"><summary>出典</summary><p>一般社団法人 金融財政事情研究会 ファイナンシャル・プランニング技能検定 1級学科試験（応用編）${q.y}年${q.m}月実施 問${q.no}。問題用紙・模範解答の画像は同会公表のPDFから。解説はこのアプリのオリジナルです。 <a href="https://www.kinzai.or.jp/uploads/lib/question/${q.y}${pad2(q.m)}/fp01_g_oyo.pdf" target="_blank" rel="noopener">原本PDF</a></p></details>
   </section>`:""}
   ${done?tutorHTML(q):""}`;
@@ -1394,13 +1417,14 @@ function renderOyo(q){
   V.querySelector("#oshow")?.addEventListener("click",()=>oyoShow(q));
   V.querySelector("#passBtn")?.addEventListener("click",()=>doPass(q));
   V.querySelectorAll("[data-orate]").forEach(b=>b.addEventListener("click",()=>oyoRate(q,b.dataset.orate)));
+  V.querySelector("#ofin")?.addEventListener("click",()=>{vStop();oyoFinish(q)});
   if(done&&!s.scrolled){s.scrolled=q.id;V.querySelectorAll(".card")[1]?.scrollIntoView({block:"start"})}
   calcBind(q);tutorBind(q);voiceBind(q);voiceAfterRender(q,done);
 }
 // 1問ずつ：今の空欄（または問い）だけを大きく出す
 function renderOyoStep(q,P){
   const s=session,r=s.rev,c=card(q.id),IM=oimg(q),cs=OYC[q.case]||{pg:[],t:""},th=THM[q.th];
-  const x=P[r.cur],shown=r.k.has(r.cur),last=r.cur+1>=P.length,a=q.ans[r.cur][1];
+  const x=P[r.cur],shown=r.k.has(x.i),a=q.ans[x.i][1];
   const imgs=keys=>IM?keys.map(k=>IM[k]?`<img class="qimg" src="${IM[k]}" alt="問題用紙の画像" loading="lazy">`:"").join(""):`<p class="note">画像を読み込んでいます…</p>`;
   const qpg=q.pg.filter(p=>!cs.pg.includes(p));
   const pct=(s.i+r.cur/P.length)/s.list.length*100;
@@ -1409,13 +1433,13 @@ function renderOyoStep(q,P){
   <div class="progress"><i style="width:${pct}%"></i></div>
   <section class="card stack">
     <div class="row" style="gap:6px"><span class="chip">${CATS[q.c]}</span><span class="chip">${oyoLabel(q)}</span>${th?`<span class="chip">${esc(shortTh(th.n))}</span>`:""}${c&&c.w?`<span class="chip ng">過去に${c.w}回ミス</span>`:""}</div>
-    <div class="label">${x.b?"空欄":"問"} ${x.k}　<span class="muted">（この問題の ${r.cur+1} / ${P.length}）</span></div>
-    ${x.pre?`<p class="qtext muted" style="font-size:.95rem">${oyoFill(q,x.pre,r.cur)}</p>`:""}
-    <p class="qtext">${x.b?oyoFill(q,x.s,r.cur):esc(x.s)}</p>
+    <div class="label">${x.b?"空欄":"問"} ${x.k}　<span class="muted">（${P.length<r.all?"前回まちがえた空欄だけ ":"この問題の "}${r.cur+1} / ${P.length}）</span></div>
+    ${x.pre?`<p class="qtext muted" style="font-size:.95rem">${oyoFill(q,x.pre,x.i)}</p>`:""}
+    <p class="qtext">${x.b?oyoFill(q,x.s,x.i):esc(x.s)}</p>
     ${shown?`<div class="oans"><b>${esc(x.k)}</b> ${esc(a)}</div>`:""}
-    ${shown?`<button class="btn primary block" id="oadv">${last?"解説を見る":`次へ（${esc(P[r.cur+1].k)}）`}</button>`
+    ${shown?`<div class="grid2"><button class="btn" data-ores="0">✕ まちがえた<br><span class="muted">明日もう一度</span></button><button class="btn primary" data-ores="1">〇 合ってた<br><span class="muted" style="color:inherit;opacity:.8">しばらく出ません</span></button></div>`
       :`<button class="btn primary block" id="oadv">答えを見る</button>`}
-    <details class="imgbox" ${x.b?"":"open"}><summary>${x.b?"問題文の全体を見る":"問題文と資料"}</summary><p class="qtext" style="font-size:.95rem">${oyoFill(q,q.t,r.cur)}</p></details>
+    <details class="imgbox" ${x.b?"":"open"}><summary>${x.b?"問題文の全体を見る":"問題文と資料"}</summary><p class="qtext" style="font-size:.95rem">${oyoFill(q,q.t,x.i)}</p></details>
     <details class="imgbox"><summary>【第${q.g}問】設例（前提の資料）を見る</summary>${imgs(cs.pg)}</details>
     ${qpg.length?`<details class="imgbox"><summary>問題用紙のこのページを見る（表・式つき）</summary>${imgs(qpg)}</details>`:""}
     ${calcHTML(q)}
@@ -1423,27 +1447,34 @@ function renderOyoStep(q,P){
     ${voiceBar(null)}
   </section>`;
   V.querySelector("#quit").onclick=()=>{vStop();session=null;render()};
-  V.querySelector("#oadv").addEventListener("click",()=>{vStop();oyoAdv(q)});
+  V.querySelector("#oadv")?.addEventListener("click",()=>{vStop();oyoAdv(q)});
+  V.querySelectorAll("[data-ores]").forEach(b=>b.addEventListener("click",()=>{vStop();oyoAdv(q,b.dataset.ores==="1")}));
   V.querySelector("#passBtn")?.addEventListener("click",()=>doPass(q));
   calcBind(q);voiceBind(q);voiceAfterRender(q,null);
 }
 // 画面を作り直しても、読んでいた位置はそのまま
 function renderOyoKeep(q){const y=window.scrollY;const vo=vOn;vOn=false;renderQuiz();vOn=vo;window.scrollTo(0,y)}
-function oyoShow(q){if(session.answered)return;session.answered={oyo:true,step:!!oyoParts(q)};if(S.pass&&S.pass[q.id])delete S.pass[q.id];renderQuiz()}
-function oyoRate(q,how){S.log[today()]=(S.log[today()]||0)+1;if(how==="wrong")session.ng++;else session.ok++;session.scrolled=null;rate(q,how)}
+function oyoShow(q){if(session.answered)return;session.answered={oyo:true,step:!!session.rev.list};if(S.pass&&S.pass[q.id])delete S.pass[q.id];renderQuiz()}
+function oyoRate(q,how,res){S.log[today()]=(S.log[today()]||0)+1;if(how==="wrong")session.ng++;else session.ok++;session.scrolled=null;rate(q,how,res)}
 const oyoSay=q=>q.t.replace(/（\s*([①-⑳])\s*）/g,"空欄$1").replace(/□□□/g,"ふせ字");
 function oyoVoice(q,done){
   const v=vset();
-  const P=!done&&oyoParts(q);
+  const P=!done&&session.rev&&session.rev.list;
   if(P){
-    const r=session.rev,x=P[r.cur],last=r.cur+1>=P.length,here=()=>session&&!session.answered&&session.list[session.i]===q&&session.rev===r;
-    const plain=t=>oyoSay({t:t.replace(/（\s*([①-⑳])\s*）/g,(m,k)=>{const i=q.ans.findIndex(a=>a[0]===k);return r.k.has(i)?q.ans[i][1]:m})});
-    if(r.k.has(r.cur)){
-      // 答えを読んだら、自動で次の空欄へ
-      speak(x.k+"、"+q.ans[r.cur][1]+"。"+(last?"":"次。"),()=>{if(vOn&&here())oyoAdv(q)},w=>here()&&["next","reveal","sure","pass"].includes(w)?()=>oyoAdv(q):w==="stop"?()=>vEnd():null);
+    const r=session.rev,x=P[r.cur],here=()=>session&&!session.answered&&session.list[session.i]===q&&session.rev===r&&P[r.cur]===x;
+    const noP=t=>String(t).replace(/[（(][^（）()]*[)）]/g,"");   // 答えの括弧（単位など）は読まない
+    const plain=t=>oyoSay({t:t.replace(/（\s*([①-⑳])\s*）/g,(m,k)=>{const i=q.ans.findIndex(a=>a[0]===k);return r.k.has(i)?noP(q.ans[i][1]):m})});
+    const num=x.k.charCodeAt(0)-0x245f;
+    if(r.k.has(x.i)){
+      // 答えを読んで「合ってた？」と聞く
+      speak(num+"番の答えは。"+noP(q.ans[x.i][1])+"。合ってた？ 間違えた？",()=>{
+        if(!vOn||!here())return;
+        if(v.mode==="free"){vStatus("🎤 「合ってた」「間違えた」と言ってください");oyoListen(q,null)}
+        else{vStatus("「合ってた」「間違えた」と入力");document.getElementById("vin")?.focus()}
+      },w=>here()?(w==="sure"?()=>oyoAdv(q,true):w==="miss"?()=>oyoAdv(q,false):w==="stop"?()=>vEnd():null):null);
       return;
     }
-    const head=r.cur===0?"応用編。"+(x.b?"空欄が"+P.length+"つあります。":"問いが"+P.length+"つあります。"):"";
+    const head=r.cur===0?"応用編。"+(P.length<r.all?"前回まちがえた空欄だけ、"+P.length+"つです。":x.b?"空欄が"+P.length+"つあります。":"問いが"+P.length+"つあります。"):"";
     speak((head+(x.b?"空欄"+x.k+"。"+(x.pre?plain(x.pre):"")+plain(x.s):plain(x.s))).replace(/。$/,"")+"。考えたら、答え、と言ってください。",()=>{
       if(!vOn||!here())return;
       if(v.mode==="free"){vStatus("🎤 「答え」で答えを見る・「パス」で後回し・「もう一度」で読み直し");oyoListen(q,null)}
@@ -1458,6 +1489,12 @@ function oyoVoice(q,done){
       else{vStatus("「答え」と入力すると答えを表示します");document.getElementById("vin")?.focus()}
     },w=>session&&!session.answered&&session.list[session.i]===q?(w==="pass"?()=>doPass(q):w==="reveal"||w==="next"?()=>oyoShow(q):w==="stop"?()=>vEnd():null):null);
   }else{
+    if(done.step){
+      // 空欄ごとに採点済みなので、解説を読んだら自動で次の問題へ
+      const t=(q.e?"解説。"+q.e+"。":"")+(q.lw?"今の法律では。"+q.lw+"。":"")+"次の問題へ進みます。";
+      speak(t,()=>{if(vOn&&session&&session.answered===done)oyoFinish(q)},w=>session&&session.answered===done&&["next","sure","pass"].includes(w)?()=>oyoFinish(q):w==="stop"?()=>vEnd():null);
+      return;
+    }
     const t=(done.step?"":"答えです。"+q.ans.map(([k,a])=>(k?k+"、":"")+a).join("。")+"。")+(q.e?"解説。"+q.e+"。":"")+(q.lw?"今の法律では。"+q.lw+"。":"")+"できた？ あやしい？ まちがえた？";
     speak(t,()=>{
       if(!vOn||!session||!session.answered)return;
@@ -1469,7 +1506,16 @@ function oyoVoice(q,done){
 function oyoWord(q,done,w){
   if(w==="stop"){vEnd();return true}
   if(w==="repeat"){voiceAfterRender(q,done);return true}
-  if(!done){if(w==="reveal"||w==="next"||w==="unknown"||w==="o"||w==="x"){oyoAdv(q);return true}if(w==="pass"){doPass(q);return true}return false}
+  if(!done&&session.rev&&session.rev.list){
+    const r=session.rev,x=r.list[r.cur];
+    if(w==="pass"){doPass(q);return true}
+    if(!r.k.has(x.i)){if(["reveal","next","unknown","o","x"].includes(w)){oyoAdv(q);return true}return false}
+    if(w==="sure"||w==="o"){oyoAdv(q,true);return true}
+    if(w==="miss"||w==="x"||w==="unknown"){oyoAdv(q,false);return true}
+    return false;
+  }
+  if(!done){if(w==="reveal"||w==="next"||w==="unknown"||w==="o"||w==="x"){oyoShow(q);return true}if(w==="pass"){doPass(q);return true}return false}
+  if(done.step){if(["next","sure","o","pass"].includes(w)){oyoFinish(q);return true}if(w==="tutor"){tutorVoice(q,done,true);return true}return false}
   if(w==="tutor"){tutorVoice(q,done,true);return true}
   if(w==="sure"||w==="o"){oyoRate(q,"sure");return true}
   if(w==="unsure"||w==="next"){oyoRate(q,"unsure");return true}
