@@ -908,7 +908,7 @@ function voiceBind(q){
   const v=vset();if(v.mode==="off")return;
   const go=document.getElementById("vgo"),again=document.getElementById("vagain"),inp=document.getElementById("vin");
   go&&go.addEventListener("click",()=>{if(vOn){vEnd()}else{vOn=true;go.textContent="⏹ 音声を止める";voiceAfterRender(q,session&&session.answered)}});
-  again&&again.addEventListener("click",()=>{vOn=true;if(go)go.textContent="⏹ 音声を止める";voiceAfterRender(q,session&&session.answered)});
+  again&&again.addEventListener("click",()=>{vOn=true;if(session&&session.rev)session.rev.full=true;if(go)go.textContent="⏹ 音声を止める";voiceAfterRender(q,session&&session.answered)});
   inp&&inp.addEventListener("input",()=>{
     const w=vParse(inp.value);if(!w)return;
     inp.value="";
@@ -1493,7 +1493,12 @@ function oyoVoice(q,done){
       return;
     }
     const head=r.cur===0?"応用編。"+(P.length<r.all?"前回まちがえた空欄だけ、"+P.length+"つです。":x.b?"空欄が"+P.length+"つあります。":"問いが"+P.length+"つあります。"):"";
-    speak((head+(x.b?"空欄"+x.k+"。"+(x.pre?plain(x.pre):"")+plain(x.s):plain(x.s))).replace(/。$/,"")+"。考えたら、答え、と言ってください。",()=>{
+    // 一度読んだ文は読み直さない（画面には毎回出す）。「もう一度」のときだけ全部読む
+    r.said=r.said||new Set();const full=r.full;r.full=false;
+    const pre=x.pre&&(full||!r.said.has(x.pre))?plain(x.pre):"";
+    const body=full||!r.said.has(x.s)?plain(x.s):"同じ文の続き";
+    if(x.pre)r.said.add(x.pre);r.said.add(x.s);
+    speak((head+(x.b?"空欄"+x.k+"。"+pre+body:body)).replace(/。$/,"")+"。"+(r.cur===0?"考えたら、答え、と言ってください。":""),()=>{
       if(!vOn||!here())return;
       if(v.mode==="free"){vStatus("🎤 「答え」で答えを見る・「パス」で後回し・「もう一度」で読み直し");oyoListen(q,null)}
       else{vStatus("「答え」と入力すると答えを表示します");document.getElementById("vin")?.focus()}
@@ -1523,7 +1528,7 @@ function oyoVoice(q,done){
 }
 function oyoWord(q,done,w){
   if(w==="stop"){vEnd();return true}
-  if(w==="repeat"){voiceAfterRender(q,done);return true}
+  if(w==="repeat"){if(session.rev)session.rev.full=true;voiceAfterRender(q,done);return true}
   if(!done&&session.rev&&session.rev.list){
     const r=session.rev,x=r.list[r.cur];
     if(w==="pass"){doPass(q);return true}
