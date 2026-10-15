@@ -836,7 +836,8 @@ function voiceAfterRender(q,done){
     const isO=q.a==="o";
     let txt=(done.ok?"正解。":done.pick==="u"?"わからない、ですね。":"不正解。")+"この文は、"+(isO?"まる":"ばつ")+"です。";
     if(q.past&&changed(q))txt+="法改正で答えが変わった文です。";
-    if(q.e)txt+="解説。"+q.e;
+    if(q.e)txt+="解説。"+q.e.replace(/。$/,"")+"。";
+    if(q.law&&q.law.t&&(q.law.s==="changed"||q.law.s==="note"))txt+="今の法律では。"+q.law.t.replace(/。$/,"")+"。";   // 法改正の訂正・補足も読む
     txt+=done.ok?"覚えた？ あやしい？":"";
     const dd=()=>session&&session.answered===done;
     speak(txt,()=>{
@@ -969,7 +970,7 @@ function tutorContext(q){
 【問】${q.t}
 【模範解答】${q.ans.map(([k,a])=>k+a).join("　")}
 【模範解答の計算過程】${(q.at||"").slice(0,1500)}
-【アプリの解説】${q.e||"なし"}${q.lw?"\n【法改正メモ】"+q.lw:""}`}
+【アプリの解説】${q.e||"なし"}${q.lw?"\n【法改正メモ】"+q.lw:""}${(()=>{const r=session&&session.rev,P=r&&r.id===q.id&&r.list;if(!P)return"";const x=P[r.cur],law=oyoLaw(q,x.k);return `\n【いま解いている空欄】${x.k}：${x.s}\n【この空欄の模範解答】${q.ans[x.i][1]}${law.length?"\n【この空欄の法改正メモ】"+law.join(" "):""}\n※質問は主にこの空欄についてです。`})()}`}
   const sib=(RAW||[]).filter(x=>x.p===q.p).map(x=>`${x.a==="o"?"〇":"×"} ${x.s}${x.e?"（解説："+x.e+"）":""}`).join("\n");
   return `【問題】${q.past?`${q.y}年${q.m}月 問${q.no}\n`:""}${q.h||""}
 ${q.vh?"【資料の内容】"+q.vh+"\n":""}【いま出題した文】${q.q}
@@ -1115,7 +1116,8 @@ function vListenText(onText,onNone){
 }
 function tutorVoice(q,done,first){
   if(!vOn||!session||session.answered!==done)return;
-  if(!aiKey()){speak("家庭教師を使うには、ホーム画面でGeminiのキーを入れてください。",()=>waitNext(q,done));return}
+  const back=()=>done?waitNext(q,done):oyoListen(q,null);
+  if(!aiKey()){speak("家庭教師を使うには、ホーム画面でGeminiのキーを入れてください。",back);return}
   const listen=until=>{
     if(!vOn||!session||session.answered!==done)return;
     if(Date.now()>until){vStatus("⏸ 聞き取りを休みました。「もう一度読む」で再開できます");return}
@@ -1124,7 +1126,7 @@ function tutorVoice(q,done,first){
       const c=t.replace(/[\s。、．,.!！?？]/g,"");
       if(/^(やめ|ストップ|止めて|とめて)/.test(c))return vEnd();
       if(/わかりやすかった|分かりやすかった|わかりやすい|分かりやすい|保存して|ほぞんして/.test(c)){const last=[...TUT.msgs].reverse().find(m=>m.role==="model");if(last){saveMine(q,last.text);tutorPaint(q)}return speak(last?"自分専用の解説として保存しました。次にこの問題が出たら最初に読みます。":"まだ説明していません。",()=>listen(until))}
-      if(/^(次|つぎ|次へ|もういい|わかった|分かった|理解した|ありがとう|オッケー|おっけー|OK)/i.test(c)){vStatus("問題に戻ります");return speak("では問題に戻ります。"+(done.ok?"覚えた？ あやしい？":"次に進むときは、次、と言ってください。"),()=>waitNext(q,done))}
+      if(/^(次|つぎ|次へ|もういい|わかった|分かった|理解した|ありがとう|オッケー|おっけー|OK)/i.test(c)){vStatus("問題に戻ります");return speak("では問題に戻ります。"+(!done?"合ってた？ 間違えた？":done.ok?"覚えた？ あやしい？":"次に進むときは、次、と言ってください。"),back)}
       if(/^(もう一度|もういちど|もう一回|もう1回)$/.test(c)){const last=[...TUT.msgs].reverse().find(m=>m.role==="model");return speak(last?last.text:"まだ説明していません。",()=>listen(until))}
       const pend=pendingCheck(),w=pend&&vParse(t);
       if(pend&&(w==="o"||w==="x")){vStatus("🧑‍🏫 判定しています…");const r=await tutorAnswer(q,w,pend.i);return speak(r||TUT.err,()=>listen(Date.now()+V_WAIT))}
@@ -1435,10 +1437,13 @@ function renderOyo(q){
   if(done&&!s.scrolled){s.scrolled=q.id;V.querySelectorAll(".card")[1]?.scrollIntoView({block:"start"})}
   calcBind(q);tutorBind(q);voiceBind(q);voiceAfterRender(q,done);
 }
+// この空欄の「今の法律では」メモ（空欄ごと＋問題全体）
+const oyoLaw=(q,k)=>{const L=q.lb||{};return [L[k],L["*"]].filter(Boolean)};
 // 1問ずつ：今の空欄（または問い）だけを大きく出す
 function renderOyoStep(q,P){
   const s=session,r=s.rev,c=card(q.id),IM=oimg(q),cs=OYC[q.case]||{pg:[],t:""},th=THM[q.th];
-  const x=P[r.cur],shown=r.k.has(x.i),a=q.ans[x.i][1];
+  const x=P[r.cur],shown=r.k.has(x.i),a=q.ans[x.i][1],law=oyoLaw(q,x.k);
+  if(TUT.qid!==q.id||TUT.bi!==x.i)TUT={qid:q.id,bi:x.i,msgs:[],busy:false,err:""};   // 家庭教師は空欄ごとに新しく
   const imgs=keys=>IM?keys.map(k=>IM[k]?`<img class="qimg" src="${IM[k]}" alt="問題用紙の画像" loading="lazy">`:"").join(""):`<p class="note">画像を読み込んでいます…</p>`;
   const qpg=q.pg.filter(p=>!cs.pg.includes(p));
   const pct=(s.i+r.cur/P.length)/s.list.length*100;
@@ -1452,6 +1457,7 @@ function renderOyoStep(q,P){
     <p class="qtext">${x.b?oyoFill(q,x.s,x.i):esc(x.s)}</p>
     ${x.b?oyoAppx(q).filter(a=>!a.k||a.k===x.k).map(a=>`<div class="ostep"><div class="label">${esc(a.h.replace(/^[〈＜《]|[〉＞》]$/g,"")||"資料")}</div><p class="qtext" style="font-size:.92rem">${esc(a.body)}</p></div>`).join(""):""}
     ${shown?`<div class="oans"><b>${esc(x.k)}</b> ${esc(a)}</div>`:""}
+    ${shown&&law.length?`<div class="lawnote"><strong>⚠ 今の法律では（2026年10月1日時点）</strong>${law.map(esc).join("<br>")}</div>`:""}
     ${shown&&(q.e||q.lw)?`<details class="imgbox"><summary>解説を見る（必要なときだけ）</summary>${q.e?`<p style="margin:6px 0">${esc(q.e)}</p>`:""}${q.lw?`<div class="lawnote"><strong>今の法律では</strong>${esc(q.lw)}</div>`:""}</details>`:""}
     ${shown?`<div class="grid2"><button class="btn" data-ores="0">✕ まちがえた<br><span class="muted">明日もう一度</span></button><button class="btn primary" data-ores="1">〇 合ってた<br><span class="muted" style="color:inherit;opacity:.8">しばらく出ません</span></button></div>`
       :`<button class="btn primary block" id="oadv">答えを見る</button>`}
@@ -1461,12 +1467,13 @@ function renderOyoStep(q,P){
     ${calcHTML(q)}
     ${shown?"":`<button class="btn block unk" id="passBtn">⏭ パス（この問題をあとで解く）</button>`}
     ${voiceBar(null)}
-  </section>`;
+  </section>
+  ${shown?tutorHTML(q):""}`;
   V.querySelector("#quit").onclick=()=>{vStop();session=null;render()};
   V.querySelector("#oadv")?.addEventListener("click",()=>{vStop();oyoAdv(q)});
   V.querySelectorAll("[data-ores]").forEach(b=>b.addEventListener("click",()=>{vStop();oyoAdv(q,b.dataset.ores==="1")}));
   V.querySelector("#passBtn")?.addEventListener("click",()=>doPass(q));
-  calcBind(q);voiceBind(q);voiceAfterRender(q,null);
+  calcBind(q);tutorBind(q);voiceBind(q);voiceAfterRender(q,null);
 }
 // 画面を作り直しても、読んでいた位置はそのまま
 function renderOyoKeep(q){const y=window.scrollY;const vo=vOn;vOn=false;renderQuiz();vOn=vo;window.scrollTo(0,y)}
@@ -1483,11 +1490,12 @@ function oyoVoice(q,done){
     const num=x.k.charCodeAt(0)-0x245f;
     if(r.k.has(x.i)){
       // 答えを読んで「合ってた？」と聞く
-      speak(num+"番の答えは。"+noP(q.ans[x.i][1])+"。合ってた？ 間違えた？",()=>{
+      const law=oyoLaw(q,x.k);
+      speak(num+"番の答えは。"+noP(q.ans[x.i][1])+"。"+(law.length?"ただし、今の法律では。"+law.map(t=>t.replace(/。$/,"")).join("。")+"。":"")+"合ってた？ 間違えた？",()=>{
         if(!vOn||!here())return;
         if(v.mode==="free"){vStatus("🎤 「合ってた」「間違えた」と言ってください");oyoListen(q,null)}
         else{vStatus("「合ってた」「間違えた」と入力");document.getElementById("vin")?.focus()}
-      },w=>here()?(w==="sure"||w==="o"?()=>oyoAdv(q,true):w==="miss"||w==="x"?()=>oyoAdv(q,false):w==="stop"?()=>vEnd():null):null);
+      },w=>here()?(w==="sure"||w==="o"?()=>oyoAdv(q,true):w==="miss"||w==="x"?()=>oyoAdv(q,false):w==="tutor"?()=>tutorVoice(q,null,true):w==="stop"?()=>vEnd():null):null);
       return;
     }
     const head=r.cur===0?"応用編。"+(P.length<r.all?"前回まちがえた空欄だけ、"+P.length+"つです。":x.b?"空欄が"+P.length+"つあります。":"問いが"+P.length+"つあります。"):"";
@@ -1531,6 +1539,7 @@ function oyoWord(q,done,w){
     const r=session.rev,x=r.list[r.cur];
     if(w==="pass"){doPass(q);return true}
     if(!r.k.has(x.i)){if(["reveal","next","unknown","o","x"].includes(w)){oyoAdv(q);return true}return false}
+    if(w==="tutor"){tutorVoice(q,null,true);return true}
     if(w==="sure"||w==="o"){oyoAdv(q,true);return true}
     if(w==="miss"||w==="x"||w==="unknown"){oyoAdv(q,false);return true}
     return false;
