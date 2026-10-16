@@ -859,11 +859,23 @@ function vParse(t){
 /* 話し終わるまで聞き続ける。スマホの音声認識は少しの間で文を区切るので、区切りごとに渡さずにつないでおき、
    「終わりの言葉」（イコール・以上など）を言うか、gap ミリ秒黙ったら、つないだ全文を渡す。
    認識が途中で止まっても（Androidは数秒で止まる）、聞いた分を持ったまま自動で聞き直す */
+// 聞き取った区切りをつなぐ。Androidは「前に聞いた分＋新しい分」をまとめて何度も送ってくるので、
+// 重なっている部分は1回分にする（「366たす」＋「366たす50」→「366たす50」、同じ区切りの二重送りも1回に）
+const V_DUP=/Android/i.test(navigator.userAgent);
+function vMerge(a,b){
+  a=String(a||"").replace(/\s+/g,"");b=String(b||"").replace(/\s+/g,"");
+  if(!a)return b;if(!b)return a;
+  if(!V_DUP)return a+b;                       // Android以外は区切りが重ならないので、そのままつなぐ
+  if(b.startsWith(a))return b;                // 前の分を含めて送り直してきた
+  if(a.startsWith(b)||a.endsWith(b))return a; // 同じ所をもう一度送ってきた
+  for(let k=Math.min(a.length,b.length)-1;k>=4;k--)if(a.endsWith(b.slice(0,k)))return a+b.slice(k);   // 4文字以上重なっていたら重なりを1回に
+  return a+b;
+}
 function vCollect(prefix,o,onDone,onNone){
   if(!SR||vMicBlocked){onNone&&onNone("nomic");return}
   {const old=vRec;vRec=null;try{old&&old.abort()}catch(e){}}
   let base=(prefix||"").trim(),cur="",done=false,timer=null,r=null;
-  const text=()=>(base+cur).trim();
+  const text=()=>vMerge(base,cur);
   const stop=()=>{done=true;clearTimeout(timer);try{r&&r.abort()}catch(_){}if(vRec===r)vRec=null};
   const end=()=>{if(done)return;const t=text();stop();onDone(o.endRe?t.replace(o.endRe,"").trim():t)};
   const arm=ms=>{clearTimeout(timer);timer=setTimeout(()=>{if(done)return;if(text())end();else{stop();onNone&&onNone("none")}},ms)};
@@ -871,9 +883,9 @@ function vCollect(prefix,o,onDone,onNone){
     r=new SR();vRec=r;r.lang="ja-JP";r.interimResults=true;r.continuous=true;r.maxAlternatives=1;
     r.onresult=e=>{
       if(done||vRec!==r)return;
-      let f="",it="";for(let j=0;j<e.results.length;j++){const x=e.results[j][0].transcript;if(e.results[j].isFinal)f+=x;else it+=x}
-      cur=f+it;o.onUpdate&&o.onUpdate(text());
-      if(o.endRe&&o.endRe.test(base+f))return end();             // 終わりの言葉
+      let f="",it="";for(let j=0;j<e.results.length;j++){const x=e.results[j][0].transcript;if(e.results[j].isFinal)f=vMerge(f,x);else it=vMerge(it,x)}
+      cur=vMerge(f,it);o.onUpdate&&o.onUpdate(text());
+      if(o.endRe&&o.endRe.test(vMerge(base,f)))return end();     // 終わりの言葉
       if(o.quick&&f&&o.quick(text()))return end();                // 短い合図（次・わかった など）はすぐ
       arm(o.gap||2500);
     };
