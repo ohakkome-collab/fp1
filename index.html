@@ -301,6 +301,14 @@ const Q=[
 
 /* ===== 復習スケジュール ===== */
 const STEPS=[1,3,7,14,30,60]; // 箱の段階ごとの次回までの日数
+/* 復習が増え続けないように「卒業」を入れる：
+   ・初めて解いて「覚えた／合ってた」→ 卒業（もう復習に出さない）
+   ・まちがえた → 明日 →（合ってた）→ 7日後 →（合ってた）→ 卒業
+   ・あやしい → 3日後 →（合ってた）→ 7日後 →（合ってた）→ 卒業
+   卒業した問題も、まちがえた記録が残っていれば試験前の「仕上げ」には出る */
+const GRAD="9999-12-31";
+const graduates=c=>!c||(c.b||0)>=2;   // 次に「覚えた」で卒業するか
+const sureLabel=c=>graduates(c)?"卒業（もう出ません）":"7日後";
 const fmt=d=>d.toISOString().slice(0,10);
 const today=()=>{const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return fmt(d)};
 const addDays=n=>{const d=new Date(today()+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+n);return fmt(d)};
@@ -310,7 +318,19 @@ const daysBetween=(a,b)=>Math.round((new Date(b+"T00:00:00Z")-new Date(a+"T00:00
 const LS="fp1note.v1";
 let S={cards:{},kako:[],pq:{},pr:"r12",pc:"",exam:"2027-01-24",log:{}};
 let db=null,docRef=null,saveTimer=null,saving=false,pending=false;
-function migrate(){S.cards=S.cards||{};Object.entries(S.pq||{}).forEach(([id,v])=>{if(!S.cards[id])S.cards[id]=v});(S.kako||[]).forEach(k=>{const id=`${k.y}_${k.m}_${String(k.no).padStart(2,"0")}`;if(!S.cards[id])S.cards[id]={b:k.b||0,c:0,w:k.w||1,lr:"x",d:k.d}});S.pq={};S.kako=[]}
+function migrateGrad(){
+  if(S.gradV)return;
+  for(const c of Object.values(S.cards||{})){
+    if(!c||!c.d)continue;
+    if(c.bb&&c.bd){
+      c.bb.forEach((b,i)=>{if(b!=null&&b>=2){c.bb[i]=STEPS.length-1;c.bd[i]=GRAD}});
+      c.d=c.bd.reduce((m,d)=>d<m?d:m);c.b=Math.min(...c.bb.map(b=>b==null?0:b));
+    }else if(c.lr==="o"&&!(c.w>0)&&(c.b||0)>=2){c.b=STEPS.length-1;c.d=GRAD}
+    else if(c.lr==="o"&&(c.b||0)>=3){c.b=STEPS.length-1;c.d=GRAD}   // まちがえた後に2回以上合っている
+  }
+  S.gradV=1;
+}
+function migrate(){migrateGrad();S.cards=S.cards||{};Object.entries(S.pq||{}).forEach(([id,v])=>{if(!S.cards[id])S.cards[id]=v});(S.kako||[]).forEach(k=>{const id=`${k.y}_${k.m}_${String(k.no).padStart(2,"0")}`;if(!S.cards[id])S.cards[id]={b:k.b||0,c:0,w:k.w||1,lr:"x",d:k.d}});S.pq={};S.kako=[]}
 function loadLocal(){try{const r=localStorage.getItem(LS);if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}}
 function saveLocal(){try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
 function setSync(t){document.getElementById("sync").textContent=t}
@@ -612,7 +632,7 @@ function renderQuiz(){
     ${S.my&&S.my[q.id]&&vset().mode==="off"?`<div class="expbox mine"><div class="label">📝 自分専用の解説（家庭教師の説明を保存）</div><p>${esc(S.my[q.id].t)}</p><button class="btn" id="myDel" style="min-height:34px;font-size:.8rem;padding:2px 10px">この保存を消す</button></div>`:""}
     ${exp}
     ${done.ok?`<div class="label">自信はどのくらい？（次に出る日が変わります）</div>
-      <div class="rate"><button class="btn" data-rate="unsure">あやしい<br><span class="muted">${STEPS[1]}日後</span></button><button class="btn primary" data-rate="sure">覚えた<br><span class="muted" style="color:inherit;opacity:.8">${STEPS[c?Math.min((c.b||0)+1,STEPS.length-1):2]}日後</span></button></div>`
+      <div class="rate"><button class="btn" data-rate="unsure">あやしい<br><span class="muted">${STEPS[1]}日後</span></button><button class="btn primary" data-rate="sure">覚えた<br><span class="muted" style="color:inherit;opacity:.8">${sureLabel(c)}</span></button></div>`
     :`<button class="btn primary block" data-rate="wrong">次へ（明日もう一度出ます）</button>`}
   </section>`:""}
   ${done?tutorHTML(q):""}`;
@@ -739,12 +759,17 @@ function rate(q,how,res){
   const first=!S.cards[q.id],c=S.cards[q.id]||{b:0,c:0,w:0};
   if(how==="wrong"){c.b=0;c.w++;c.lr="x";c.d=addDays(STEPS[0])}
   else if(how==="unsure"){c.c++;c.lr="o";c.b=1;c.d=addDays(STEPS[1])}
-  else{c.c++;c.lr="o";c.b=first?2:Math.min(c.b+1,STEPS.length-1);c.d=addDays(STEPS[c.b])}   // 初見で正解・覚えた→いきなり7日後
+  else if(first||(c.b||0)>=2){c.c++;c.lr="o";c.b=STEPS.length-1;c.d=GRAD}   // 卒業
+  else{c.c++;c.lr="o";c.b=2;c.d=addDays(STEPS[2])}                           // まちがえた・あやしいの後に合った→7日後
   if(res&&Object.keys(res).length){
     // 応用編は空欄ごとに次に出す日を決める。問題全体の期限は、いちばん早い空欄に合わせる
     const n=q.ans.length;c.bb=(c.bb||[]).slice(0,n);c.bd=(c.bd||[]).slice(0,n);
     for(let i=0;i<n;i++){
-      if(i in res){c.bb[i]=res[i]?(c.bb[i]==null?2:Math.min(c.bb[i]+1,STEPS.length-1)):0;c.bd[i]=addDays(STEPS[c.bb[i]])}
+      if(i in res){
+        if(!res[i]){c.bb[i]=0;c.bd[i]=addDays(STEPS[0])}
+        else if(c.bb[i]==null||c.bb[i]>=2){c.bb[i]=STEPS.length-1;c.bd[i]=GRAD}   // 初めてで合った・2回続けて合った→卒業
+        else{c.bb[i]=2;c.bd[i]=addDays(STEPS[2])}
+      }
       else if(c.bd[i]==null){c.bb[i]=c.b;c.bd[i]=c.d}
     }
     c.d=c.bd.reduce((m,d)=>d<m?d:m);c.b=Math.min(...c.bb);
@@ -1522,7 +1547,7 @@ function renderOyo(q){
   const prev=s.list[s.i-1],firstOfCase=!prev||prev.case!==q.case;
   const blanks=q.ans.map(([k,a],i)=>{const show=done||s.rev.k.has(i);return `<button class="btn oblank ${show?"on":""}" data-rv="${i}" ${show?"disabled":""}><b>${k||"答"}</b>${show?esc(a):"？"}</button>`}).join("");
   const steps=q.st&&q.st.length?`<div class="ostep"><div class="label">解き方の手順（型紙）</div>${done||s.rev.st?`<ol>${q.st.slice(0,done?q.st.length:s.rev.st).map(x=>`<li>${gl(esc(x),SS)}</li>`).join("")}</ol>`:""}${!done&&s.rev.st<q.st.length?`<button class="btn" id="nstep">${s.rev.st?"次の手順を見る":"ヒント：最初の手順を見る"}（${s.rev.st}/${q.st.length}）</button>`:""}</div>`:"";
-  const nb=c?Math.min((c.b||0)+1,STEPS.length-1):2;
+  const nb=0;
   V.innerHTML=`
   <div class="qhead"><span>${esc(s.name)}</span><span>${s.i+1} / ${s.list.length}</span><button class="btn" id="quit" style="min-height:36px;padding:4px 10px;font-size:.8rem">やめる</button></div>
   <div class="progress"><i style="width:${pct}%"></i></div>
@@ -1544,7 +1569,7 @@ function renderOyo(q){
     ${q.lw?`<div class="lawnote"><strong>今の法律では（2026年10月1日時点）</strong>${esc(q.lw)}</div>`:""}
     <details class="imgbox" ${q.e?"":"open"}><summary>模範解答（計算過程つき）を見る</summary>${imgs(q.ak||[])}</details>
     ${done.step?(()=>{const v=Object.values(s.rev.res),o=v.filter(Boolean).length,x=v.length-o;return `<p style="margin:0">〇 ${o}　✕ ${x}　${x?"→ ✕の空欄だけ明日もう一度出します":"→ 全部合っていました"}</p><button class="btn primary block" id="ofin">次の問題へ</button>`})():`<div class="label">自分で採点（次に出る日が変わります）</div>
-    <div class="rate3"><button class="btn" data-orate="wrong">まちがえた<br><span class="muted">明日</span></button><button class="btn" data-orate="unsure">あやしい<br><span class="muted">${STEPS[1]}日後</span></button><button class="btn primary" data-orate="sure">できた<br><span class="muted" style="color:inherit;opacity:.8">${STEPS[nb]}日後</span></button></div>`}
+    <div class="rate3"><button class="btn" data-orate="wrong">まちがえた<br><span class="muted">明日</span></button><button class="btn" data-orate="unsure">あやしい<br><span class="muted">${STEPS[1]}日後</span></button><button class="btn primary" data-orate="sure">できた<br><span class="muted" style="color:inherit;opacity:.8">${sureLabel(c)}</span></button></div>`}
     <details class="src"><summary>出典</summary><p>一般社団法人 金融財政事情研究会 ファイナンシャル・プランニング技能検定 1級学科試験（応用編）${q.y}年${q.m}月実施 問${q.no}。問題用紙・模範解答の画像は同会公表のPDFから。解説はこのアプリのオリジナルです。 <a href="https://www.kinzai.or.jp/uploads/lib/question/${q.y}${pad2(q.m)}/fp01_g_oyo.pdf" target="_blank" rel="noopener">原本PDF</a></p></details>
   </section>`:""}
   ${done?tutorHTML(q):""}`;
@@ -1580,7 +1605,7 @@ function renderOyoStep(q,P){
     ${shown?`<div class="oans"><b>${esc(x.k)}</b> ${esc(a)}</div>`:""}
     ${shown&&law.length?`<div class="lawnote"><strong>⚠ 今の法律では（2026年10月1日時点）</strong>${law.map(esc).join("<br>")}</div>`:""}
     ${shown&&(q.e||q.lw)?`<details class="imgbox"><summary>解説を見る（必要なときだけ）</summary>${q.e?`<p style="margin:6px 0">${esc(q.e)}</p>`:""}${q.lw?`<div class="lawnote"><strong>今の法律では</strong>${esc(q.lw)}</div>`:""}</details>`:""}
-    ${shown?`<div class="grid2"><button class="btn" data-ores="0">✕ まちがえた<br><span class="muted">明日もう一度</span></button><button class="btn primary" data-ores="1">〇 合ってた<br><span class="muted" style="color:inherit;opacity:.8">しばらく出ません</span></button></div>`
+    ${shown?`<div class="grid2"><button class="btn" data-ores="0">✕ まちがえた<br><span class="muted">明日もう一度</span></button><button class="btn primary" data-ores="1">〇 合ってた<br><span class="muted" style="color:inherit;opacity:.8">${(()=>{const b=c&&c.bb?c.bb[x.i]:null;return b==null||b>=2?"卒業（もう出ません）":"7日後"})()}</span></button></div>`
       :`<button class="btn primary block" id="oadv">答えを見る</button>`}
     <details class="imgbox" ${x.b?"":"open"}><summary>${x.b?"問題文の全体を見る":"問題文と資料"}</summary><p class="qtext" style="font-size:.95rem">${oyoFill(q,q.t,x.i)}</p></details>
     <details class="imgbox"><summary>【第${q.g}問】設例（前提の資料）を見る</summary>${imgs(cs.pg)}</details>
