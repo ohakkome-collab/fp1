@@ -665,7 +665,8 @@ function calcBind(q){
   box.querySelector("#cmic")?.addEventListener("click",()=>{
     if(!SR||vMicBlocked){res.textContent="このページではマイクが使えません";return}
     const was=vOn;vStop();vOn=was;res.textContent="🎤 式を話してください（例：30万かける7.125わる1000）";
-    vListenText(t=>vCalcSay(t,null,true),()=>{res.textContent="聞き取れませんでした。もう一度押してください"});
+    beep();
+    vCollect("",{gap:2500,first:10000,endRe:CALC_END,onUpdate:t=>{res.textContent="🎤 "+t}},t=>vCalcSay(t,null,true),()=>{res.textContent="聞き取れませんでした。もう一度押してください"});
   });
 }
 /* ===== 声で電卓 =====
@@ -719,8 +720,9 @@ function vCalcSay(t,cb,always){
     if(vOn||always)speak("答えは、"+say+"。",cb);else cb&&cb();
   }else{
     if(box){const r=box.querySelector("#cres");if(r)r.textContent="式にできませんでした："+t}
-    vStatus("🧮 式にできませんでした。「計算、30万かける7.125」のように言ってください");
-    if(vOn||always)speak("計算できませんでした。もう一度、計算、から言ってください。",cb);else cb&&cb();
+    const heard=String(t||"").replace(CALC_HEAD,"").trim();
+    vStatus(heard?"🧮 式にできませんでした。聞こえた言葉：「"+heard+"」":"🧮 式が聞こえませんでした");
+    if(vOn||always)speak(heard?"聞こえたのは、"+heard+"。これは式にできませんでした。":"式が聞こえませんでした。",cb);else cb&&cb();
   }
 }
 function answer(q,pick){
@@ -825,7 +827,7 @@ function speak(text,cb,onCmd){
   u.onend=fin;u.onerror=fin;
   speechSynthesis.speak(u);
   if(onCmd)bargeStart(w=>{if(done)return true;const go=onCmd(w);if(!go)return false;done=true;bargeStop();speechSynthesis.cancel();setTimeout(go,0);return true},
-    t=>{if(done)return true;done=true;bargeStop();speechSynthesis.cancel();setTimeout(()=>vCalcSay(t,cb),0);return true});
+    t=>{if(done)return true;done=true;bargeStop();speechSynthesis.cancel();setTimeout(()=>vCalcListen(t,cb),0);return true});
 }
 function vStop(){
   vOn=false;vBusy=false;
@@ -854,6 +856,43 @@ function vParse(t){
   if(W_O.test(t))return"o";
   return null;
 }
+/* 話し終わるまで聞き続ける。スマホの音声認識は少しの間で文を区切るので、区切りごとに渡さずにつないでおき、
+   「終わりの言葉」（イコール・以上など）を言うか、gap ミリ秒黙ったら、つないだ全文を渡す。
+   認識が途中で止まっても（Androidは数秒で止まる）、聞いた分を持ったまま自動で聞き直す */
+function vCollect(prefix,o,onDone,onNone){
+  if(!SR||vMicBlocked){onNone&&onNone("nomic");return}
+  {const old=vRec;vRec=null;try{old&&old.abort()}catch(e){}}
+  let base=(prefix||"").trim(),cur="",done=false,timer=null,r=null;
+  const text=()=>(base+cur).trim();
+  const stop=()=>{done=true;clearTimeout(timer);try{r&&r.abort()}catch(_){}if(vRec===r)vRec=null};
+  const end=()=>{if(done)return;const t=text();stop();onDone(o.endRe?t.replace(o.endRe,"").trim():t)};
+  const arm=ms=>{clearTimeout(timer);timer=setTimeout(()=>{if(done)return;if(text())end();else{stop();onNone&&onNone("none")}},ms)};
+  const start=()=>{
+    r=new SR();vRec=r;r.lang="ja-JP";r.interimResults=true;r.continuous=true;r.maxAlternatives=1;
+    r.onresult=e=>{
+      if(done||vRec!==r)return;
+      let f="",it="";for(let j=0;j<e.results.length;j++){const x=e.results[j][0].transcript;if(e.results[j].isFinal)f+=x;else it+=x}
+      cur=f+it;o.onUpdate&&o.onUpdate(text());
+      if(o.endRe&&o.endRe.test(base+f))return end();             // 終わりの言葉
+      if(o.quick&&f&&o.quick(text()))return end();                // 短い合図（次・わかった など）はすぐ
+      arm(o.gap||2500);
+    };
+    r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"||e.error==="audio-capture"){vMicBlocked=true;stop();onNone&&onNone("nomic")}};
+    r.onend=()=>{if(done||vRec!==r)return;base=text();cur="";setTimeout(()=>{if(!done)start()},150)};   // 止まっても聞き直す
+    try{r.start()}catch(e){stop();onNone&&onNone("nomic")}
+  };
+  start();arm(o.first||10000);
+}
+// 「ピッ」（計算の式を聞き始めた合図）
+function beep(){try{const A=window.AudioContext||window.webkitAudioContext;if(!A)return;const c=beep.c||(beep.c=new A()),g=c.createGain(),os=c.createOscillator();os.frequency.value=880;g.gain.value=0.15;os.connect(g);g.connect(c.destination);os.start();os.stop(c.currentTime+0.12)}catch(e){}}
+const CALC_END=/[、。\s]*(イコール|いこーる|＝|=|は[？?]?|いくら[？?]?|ですか[？?]?)[、。\s]*$/;
+// 「計算」と聞こえたら、式を言い終わるまで聞く（イコールで終わり、または2.5秒黙ったら計算）
+function vCalcListen(prefix,cb){
+  beep();
+  vStatus("🧮 式をどうぞ（言い終わったら「イコール」、または少し黙る）");
+  vCollect(String(prefix||"").replace(CALC_HEAD,""),{gap:2500,first:10000,endRe:CALC_END,onUpdate:t=>vStatus("🧮 "+t)},
+    t=>vCalcSay(t,cb),why=>{if(why==="nomic"){vStatus("このページではマイクが使えません");vMicNote();return}vCalcSay("",cb)});
+}
 function vListen(onWord,onNone){
   if(!SR||vMicBlocked){onNone&&onNone("nomic");return}
   {const old=vRec;vRec=null;try{old&&old.abort()}catch(e){}}
@@ -865,7 +904,7 @@ function vListen(onWord,onNone){
     // 途中経過も含めて、すべての候補から最初にわかった言葉を使う
     for(let i=e.resultIndex;i<e.results.length;i++){
       const ca=[...e.results[i]].find(a=>isCalcSpeech(a.transcript));
-      if(ca){if(e.results[i].isFinal){got=true;try{r.abort()}catch(_){}vRec=null;onWord("calc",ca.transcript);return}continue}
+      if(ca){if(e.results[i].isFinal){got=true;try{r.abort()}catch(_){}vRec=null;onWord("calc",ca.transcript);return}continue}   // 続きは vCalcListen で聞く
       for(const a of e.results[i]){const w=vParse(a.transcript);if(w){got=true;try{r.abort()}catch(_){}vRec=null;onWord(w,a.transcript);return}}
     }
   };
@@ -919,7 +958,7 @@ function waitNext(q,done,until){
   if(!vOn||!session||session.answered!==done)return;
   if(Date.now()>until){vStatus("⏸ 聞き取りを休みました。「もう一度読む」で再開できます");return}
   vListen((w,t)=>{
-    if(w==="calc")return vCalcSay(t,()=>waitNext(q,done,until));
+    if(w==="calc")return vCalcListen(t,()=>waitNext(q,done,until));
     if(w==="stop")return vEnd();
     if(w==="repeat")return voiceAfterRender(q,done);
     if(w==="tutor"||w==="unknown")return tutorVoice(q,done,true);
@@ -938,7 +977,7 @@ function listenAnswer(q,until){
   if(!vOn||!session||session.answered)return;
   if(Date.now()>until){vStatus("⏸ 長く答えがなかったので聞き取りを休みました。「もう一度読む」で再開できます");return}
   vListen((w,t)=>{
-    if(w==="calc")return vCalcSay(t,()=>listenAnswer(q,until));
+    if(w==="calc")return vCalcListen(t,()=>listenAnswer(q,until));
     if(w==="stop")return vEnd();
     if(w==="o"||w==="x")return answer(q,w);
     if(w==="unknown")return answer(q,"u");
@@ -976,7 +1015,7 @@ function voiceBind(q){
   again&&again.addEventListener("click",()=>{vOn=true;if(session&&session.rev)session.rev.full=true;if(go)go.textContent="⏹ 音声を止める";voiceAfterRender(q,session&&session.answered)});
   let calcT=null;
   inp&&inp.addEventListener("input",()=>{
-    if(isCalcSpeech(inp.value)){clearTimeout(calcT);calcT=setTimeout(()=>{const t=inp.value;inp.value="";vCalcSay(t,null,true)},1200);return}
+    if(isCalcSpeech(inp.value)){clearTimeout(calcT);calcT=setTimeout(()=>{const t=inp.value;inp.value="";vCalcSay(t,null,true)},CALC_END.test(inp.value)?100:2500);return}
     const w=vParse(inp.value);if(!w)return;
     inp.value="";
     if(q.oyo){oyoWord(q,session&&session.answered,w);return}
@@ -1190,7 +1229,9 @@ function tutorVoice(q,done,first){
     if(!vOn||!session||session.answered!==done)return;
     if(Date.now()>until){vStatus("⏸ 聞き取りを休みました。「もう一度読む」で再開できます");return}
     vStatus(pendingCheck()?"🧑‍🏫 確認問題：「まる」か「ばつ」で答えてください（質問してもOK）":"🧑‍🏫 家庭教師：質問を話してください（「確認問題」で〇×・「わかりやすかった」で保存・「次」で問題に戻る）");
-    vListenText(async t=>{
+    vCollect("",{gap:3000,first:Math.max(1000,until-Date.now()),endRe:/[、。\s]*(以上|いじょう|送信|そうしん|おしまい)[。\s]*$/,
+      quick:t=>/^(次|つぎ|次へ|もういい|わかった|分かった|理解した|ありがとう|オッケー|おっけー|OK|やめ|ストップ|止めて|とめて|もう一度|もういちど|もう一回|もう1回|まる|ばつ|正しい|違う|ちがう|わかりやすかった|分かりやすかった|保存して)[。、\s]*$/i.test(t.trim()),
+      onUpdate:t=>vStatus("🧑‍🏫 「"+t+"」（言い終わったら3秒待つか「以上」）")},async t=>{
       const c=t.replace(/[\s。、．,.!！?？]/g,"");
       if(/^(やめ|ストップ|止めて|とめて)/.test(c))return vEnd();
       if(/わかりやすかった|分かりやすかった|わかりやすい|分かりやすい|保存して|ほぞんして/.test(c)){const last=[...TUT.msgs].reverse().find(m=>m.role==="model");if(last){saveMine(q,last.text);tutorPaint(q)}return speak(last?"自分専用の解説として保存しました。次にこの問題が出たら最初に読みます。":"まだ説明していません。",()=>listen(until))}
@@ -1207,7 +1248,7 @@ function tutorVoice(q,done,first){
       setTimeout(()=>listen(until),300);
     });
   };
-  if(first)speak("家庭教師です。わからないところを話してください。",()=>listen(Date.now()+V_WAIT));
+  if(first)speak("家庭教師です。わからないところを話してください。言い終わったら、以上、と言うか、3秒待ってください。",()=>listen(Date.now()+V_WAIT));
   else listen(Date.now()+V_WAIT);
 }
 function aiSettings(){
@@ -1624,7 +1665,7 @@ function oyoListen(q,done,until){
   if(!until)until=Date.now()+V_WAIT*(done?2:1);
   if(!vOn||!session||session.answered!==done)return;
   if(Date.now()>until){vStatus("⏸ 聞き取りを休みました。「もう一度読む」で再開できます");return}
-  vListen((w,t)=>{if(w==="calc")return vCalcSay(t,()=>oyoListen(q,done,until));if(!oyoWord(q,done,w))oyoListen(q,done,until)},why=>{
+  vListen((w,t)=>{if(w==="calc")return vCalcListen(t,()=>oyoListen(q,done,until));if(!oyoWord(q,done,w))oyoListen(q,done,until)},why=>{
     if(why==="nomic"){vStatus("このページではマイクが使えません");vMicNote();return}
     setTimeout(()=>oyoListen(q,done,until),300);
   });
