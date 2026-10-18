@@ -710,8 +710,9 @@ function speechToExpr(t){
     .replace(/[,，、\s]|円|えん|は(いくら|何|なに)?[？?]*$|いくら[？?]*$|イコール|=$/g,"")
     .replace(/(\d)\s*(てん|点|ポイント)\s*(\d)/g,"$1.$3")
     .replace(/かっことじ|カッコ閉じ|かっこ閉じ|括弧閉じ|とじかっこ|閉じかっこ/g,")").replace(/かっこ|カッコ|括弧/g,"(")
-    .replace(/たす|足す|プラス|\+/g,"+").replace(/ひく|引く|マイナス|−|ー(?=\d)/g,"-")
-    .replace(/かける|掛ける|カケル|[×✕xX＊]/g,"*").replace(/わる|割る|ワル|[÷／]/g,"/")
+    .replace(/の?([0-9０-９]+)割(?![るっ])/g,"*($1/10)").replace(/([0-9０-９]+)倍/g,"*$1")
+    .replace(/たして|足して|たす|足す|プラス|\+/g,"+").replace(/ひいて|引いて|ひく|引く|マイナス|−|ー(?=\d)/g,"-")
+    .replace(/かけて|掛けて|かける|掛ける|カケル|[×✕xX＊]/g,"*").replace(/わって|割って|わる|割る|ワル|[÷／]/g,"/")
     .replace(/パーセント|%/g,"%").replace(/ルート|√/g,"√")
     .replace(/の?(2|二)乗/g,"^2").replace(/の?(\d+)乗/g,"^$1");
   s=s.replace(/[0-9.〇一二三四五六七八九十百千万億兆]+/g,m=>/^[.]+$/.test(m)?m:String(jaNum(m)));
@@ -719,7 +720,25 @@ function speechToExpr(t){
   // 「〇〇のルート」：最後に言ったら式全体の、途中なら直前の数の平方根
   if(/の?√$/.test(s))s="√("+s.replace(/の?√$/,"")+")";
   s=s.replace(/([\d.]+|\([^()]*\))の?√/g,"√$1");
+  speechToExpr.junk=s.replace(/えーと|えっと|あのー?|その|ほな|ほんで|そんで|ほいで|それから|全部|ぜんぶ|お願い|おねがい|ちょうだい|して|やって|しといて|ください|です|ます|答え|こたえ|なんぼ|いくら|って|[でをのがはねよなやわん]/g,"").replace(/[0-9.+\-*/^√%()]/g,"");
   return s.replace(/[^0-9.+\-*/^√%()]/g,"");
+}
+// 式を読み上げ用の言葉にする（「300000*7.125/1000」→「30万 かける 7.125 わる 1000」）
+function exprSay(ex){
+  const n=x=>{const v=parseFloat(x);if(!isFinite(v))return x;if(Number.isInteger(v)&&v>=10000){const o=Math.floor(v/1e8),m=Math.floor(v%1e8/1e4),r=v%1e4;return (o?o+"億":"")+(m?m+"万":"")+(r?r:"")}return x};
+  return ex.replace(/[\d.]+/g,n).replace(/\*/g,"かける").replace(/\//g,"わる").replace(/\+/g,"たす").replace(/-/g,"ひく")
+    .replace(/\^(\d+)/g,"の$1乗").replace(/√/g,"ルート").replace(/%/g,"パーセント").replace(/\(/g,"かっこ").replace(/\)/g,"かっことじ");
+}
+// AIに式へ直してもらう（アプリで式にできなかったときだけ）。答えの計算はAIにさせず、必ずアプリの電卓で計算する
+const CALC_SYS="あなたは音声電卓の式づくり係です。スマホの音声認識で聞き取った日本語（関西弁・言い間違い・聞き間違い・同音異義語を含む）を、意図をくみ取って電卓の式に直してください。出力は式1行だけ。使ってよい文字は 0-9 . + - * / ^ ( ) だけ（ルートは sqrt( ) と書く、パーセントは /100 にする）。万・億・千は数字に展開する（30万→300000）。「春」「貼る」は割る、「欠ける」「駆ける」は掛ける、「足す」「出す」は足すのように、計算の言葉の聞き間違いは直す。計算と関係ない言葉は無視。どうしても式にできないときは NG とだけ出力。";
+async function aiExpr(heard){
+  if(!aiKey())return null;
+  const a=await aiCall([{role:"user",parts:[{text:"聞き取った言葉："+heard}]}],null,{sys:CALC_SYS,temp:0});
+  let ex=String(a||"").split("\n").map(x=>x.trim()).find(x=>x&&!/^```/.test(x))||"";
+  if(/NG/i.test(ex))return null;
+  ex=ex.replace(/[＝=].*$/,"").replace(/\s/g,"").replace(/×/g,"*").replace(/÷/g,"/").replace(/sqrt/gi,"√").normalize("NFKC");
+  if(!ex||/[^0-9.+\-*/^√%()]/.test(ex))return null;
+  try{calcEval(ex);return ex}catch(e){return null}
 }
 // 計算の言葉らしいか（「計算」で始まる、または数字が2つ以上と＋−×÷がある）
 function isCalcSpeech(t){
@@ -727,21 +746,28 @@ function isCalcSpeech(t){
   const n=(t.normalize("NFKC").match(/\d+/g)||[]).length;
   return n>=2&&/たす|足す|プラス|ひく|引く|マイナス|かける|掛ける|わる|割る|[+×✕÷*/]/.test(t);
 }
-// 計算して、電卓に出して、答えを読み上げる（cb：読み終わったら続ける処理）
-function vCalcSay(t,cb,always){
-  let ex="",v=null;
-  try{ex=speechToExpr(t);v=calcEval(ex)}catch(e){v=null}
+// 計算して、電卓に出して、式と答えを読み上げる（cb：読み終わったら続ける処理）
+// ①アプリで式にする → ②言葉が残って式にできなければAI（Gemini）に式へ直してもらう → ③「式で、答え」と読む
+async function vCalcSay(t,cb,always){
+  const heard=String(t||"").replace(CALC_HEAD,"").trim();
+  let ex="",v=null,via="";
+  try{ex=speechToExpr(heard);if(ex&&!speechToExpr.junk)v=calcEval(ex)}catch(e){v=null}
+  if(v===null&&heard){
+    vStatus("🧮 「"+heard+"」をAIで式に直しています…");
+    const ae=await aiExpr(heard).catch(()=>null);
+    if(ae){ex=ae;try{v=calcEval(ex);via="AI"}catch(e){v=null}}
+  }
   const box=V.querySelector(".calc");
+  const noAI=v===null&&heard&&!aiKey();   // AIが使えない（キー未設定・claude.ai版）ときは、まちがった式で計算しない
   if(v!==null&&ex){
     CALC.ex=String(Math.round(v*1e10)/1e10);CALC.open=true;
     if(box){box.open=true;const e=box.querySelector("#cex"),r=box.querySelector("#cres");if(e)e.textContent=calcShow(ex);if(r)r.textContent="＝ "+calcFmt(v)}
-    vStatus("🧮 "+calcShow(ex)+" ＝ "+calcFmt(v));
+    vStatus("🧮 "+calcShow(ex)+" ＝ "+calcFmt(v)+(via==="AI"?"（AIで式に直しました。聞こえた言葉：「"+heard+"」）":via==="?"?"（聞こえた言葉：「"+heard+"」）":""));
     const say=(Math.round(v*(Math.abs(v)>=100?100:10000))/(Math.abs(v)>=100?100:10000)).toLocaleString("ja-JP",{maximumFractionDigits:4});   // 読み上げは小数を短く
-    if(vOn||always)speak("答えは、"+say+"。",cb);else cb&&cb();
+    if(vOn||always)speak(exprSay(ex)+"で、"+say+"。",cb);else cb&&cb();
   }else{
-    if(box){const r=box.querySelector("#cres");if(r)r.textContent="式にできませんでした："+t}
-    const heard=String(t||"").replace(CALC_HEAD,"").trim();
-    vStatus(heard?"🧮 式にできませんでした。聞こえた言葉：「"+heard+"」":"🧮 式が聞こえませんでした");
+    vStatus(heard?"🧮 式にできませんでした。聞こえた言葉：「"+heard+"」"+(noAI?"（ホーム画面の「AI家庭教師」でGeminiのキーを入れると、AIが式に直します）":""):"🧮 式が聞こえませんでした");
+    if(box){const r=box.querySelector("#cres");if(r)r.textContent=heard?"式にできませんでした：「"+heard+"」":"式が聞こえませんでした"}
     if(vOn||always)speak(heard?"聞こえたのは、"+heard+"。これは式にできませんでした。":"式が聞こえませんでした。",cb);else cb&&cb();
   }
 }
@@ -826,11 +852,11 @@ function vClean(t){
 let vBarge=null;
 const B_ANY=[[/^(パス|ぱす|pass|スキップ|すきっぷ)$/i,"pass"],[/^(ストップ|すとっぷ|やめて|止めて|とめて|やめる)$/,"stop"],[/^(覚えた|おぼえた|オボエタ|できた|出来た|合ってた|あってた|正解|せいかい)$/,"sure"],[/^(あやしい|怪しい|アヤシイ)$/,"unsure"],[/^(まちがえた|間違えた|できなかった|間違い|まちがい|不正解)$/,"miss"]];
 const B_FIN=[[/^(次|つぎ|ツギ|次へ|つぎへ|ネクスト|next)$/i,"next"],[/^(答え|こたえ|コタエ)$/,"reveal"],
-  [/^(正しい|ただしい|正しいです|まる|マル|丸|〇|○|◯|正解|せいかい|適切|てきせつ)$/,"o"],
+  [/^(正しい|ただしい|正しいです|まる|マル|丸|〇|○|◯|正解|せいかい|適切|てきせつ|合ってる|合ってた|あってる|あってた)$/,"o"],
   [/^(違う|ちがう|チガウ|違います|ちがいます|ばつ|バツ|罰|ぺけ|誤り|あやまり|不適切)$/,"x"],
   [/^(わからない|分からない|わかんない|分かんない|わかりません)$/,"unknown"],
   [/^(教えて|おしえて|教えてください|先生|せんせい|家庭教師|質問)$/,"tutor"]];
-function bargeParse(t,fin){t=String(t).replace(/[\s。、．,.!！?？]/g,"");if(!t||t.length>6)return null;for(const[r,w] of B_ANY)if(r.test(t))return w;if(fin)for(const[r,w] of B_FIN)if(r.test(t))return w;return null}
+function bargeParse(t,fin){t=kansai(t);if(!t||t.length>6)return null;for(const[r,w] of B_ANY)if(r.test(t))return w;if(fin)for(const[r,w] of B_FIN)if(r.test(t))return w;return null}
 function bargeStop(){const r=vBarge;vBarge=null;try{r&&r.abort()}catch(e){}}
 function bargeStart(onCmd,onCalc){
   if(!onCmd||!SR||vMicBlocked||!vOn||vset().mode!=="free"||vset().barge===false)return;
@@ -863,8 +889,24 @@ function vStop(){
 // 聞き取った言葉を判定（聞き間違いやすい言い方も広く受け付ける）
 const W_O=/あってた|合ってた|正しい|ただしい|タダシイ|正解|せいかい|あってる|合ってる|あっている|合っている|その通り|そのとおり|まる|マル|丸|〇|○|◯|まーる|マール|はい|ハイ|はーい|イエス|いえす|yes|適切|てきせつ|オッケー|おっけー|^ok$|^o$|^オー$|^王$|^円$|^春$|^猿$|^ある$|^まあ$|^まぁ$|^マー$/i;
 const W_X=/違う|ちがう|チガウ|違います|ちがいます|間違|まちが|マチガ|ばつ|バツ|罰|ぺけ|ペケ|×|✕|✖|いいえ|イイエ|いえ$|ノー|^no$|ダメ|だめ|駄目|不適切|ふてきせつ|誤り|あやまり|不正解|^抜|^伐|^ばっ|^バッ|^発$|^八$|^パツ$/i;
+// 関西弁・くだけた言い方を標準の言い方にそろえる（「ちゃう」→「違う」、「わからへん」→「わからない」など）
+function kansai(t){
+  return String(t).replace(/[\s。、．,.!！?？]/g,"")
+    .replace(/^(ほな|ほんなら|ほんだら|じゃあ|ほんで|そしたら|えーと|えっと|あの)+/,"")
+    .replace(/まちごうた|まちごた|間違うた|間違ごうた|間違えてもうた|間違ってもうた|まちがえてもうた|ミスった|みすった|はずれた|外れた|ハズレ|はずれ|あかんかった|できひんかった|でけへんかった|できへんかった|でけへんかってん|ちゃうかった|ちごた|ちごうた/g,"間違えた")
+    .replace(/わからへん|分からへん|わかれへん|分かれへん|わからん|分からん|わかりまへん|しらん|知らん|知らへん|しらへん/g,"わからない")
+    .replace(/あうてた|合うてた|おうてた|あっとった|合っとった|おうとった/g,"合ってた")
+    .replace(/あうてる|合うてる|おうてる|おうとる|あっとる|合っとる/g,"合ってる")
+    .replace(/ちゃうちゃう|ちゃいます|ちゃいまっせ|ちゃいまんがな|ちゃうで|ちゃうやん|ちゃうやろ|ちゃうわ|チャウ|ちゃう/g,"違う")
+    .replace(/^(あかん|アカン)(で|わ|な|や)?$/,"違う")
+    .replace(/^(せや|せやな|せやで|そうや|そうやで|ほんまや|ほんま)$/,"正しい")
+    .replace(/もういっぺん|もういっぺん|もっぺん|もう1ぺん|もう一遍/g,"もう一度")
+    .replace(/いけたわ|いけた|楽勝|余裕や|完璧|かんぺき/g,"覚えた")
+    .replace(/^(次|つぎ)(いこ|行こ|いこか|行こか|いって|行って|や|やで|いこう)$/,"次")
+    .replace(/(で|や|やで|やん|やな|わ|ねん|やねん|なあ|な)$/,"");
+}
 function vParse(t){
-  t=String(t).replace(/[\s。、．,.!！?？]/g,"");
+  t=kansai(t);
   if(!t)return null;
   if(/もう一度|もういちど|もう一回|もう1回|もういっかい|もっかい|もう1度|繰り返|くりかえ|リピート|聞き直|ききなお|読み直|よみなお/.test(t))return"repeat";
   if(/パス|ぱす|スキップ|あとで|後で|後回し|あとまわし/.test(t))return"pass";
@@ -922,7 +964,7 @@ function vCollect(prefix,o,onDone,onNone){
 }
 // 「ピッ」（計算の式を聞き始めた合図）
 function beep(){try{const A=window.AudioContext||window.webkitAudioContext;if(!A)return;const c=beep.c||(beep.c=new A()),g=c.createGain(),os=c.createOscillator();os.frequency.value=880;g.gain.value=0.15;os.connect(g);g.connect(c.destination);os.start();os.stop(c.currentTime+0.12)}catch(e){}}
-const CALC_END=/[、。\s]*(イコール|いこーる|＝|=|は[？?]?|いくら[？?]?|ですか[？?]?)[、。\s]*$/;
+const CALC_END=/[、。\s]*(イコール|いこーる|＝|=|は[？?]?|いくら[？?]?|ですか[？?]?|なんぼ(や|なん|になる)?[？?]?|いくらや[？?]?|になる[？?]?)[、。\s]*$/;
 // 「計算」と聞こえたら、式を言い終わるまで聞く（イコールで終わり、または2.5秒黙ったら計算）
 function vCalcListen(prefix,cb){
   beep();
@@ -1142,7 +1184,8 @@ async function aiModels(key){
   return [...new Set([saved,...names,"gemini-flash-latest","gemini-flash-lite-latest","gemini-2.5-flash","gemini-2.5-flash-lite"].filter(Boolean))];
 }
 function aiDetail(status,j){const m=j&&j.error&&(j.error.message||j.error.status);return `（${status}${m?"："+String(m).slice(0,120):""}）`}
-async function aiCall(contents,onStep){
+async function aiCall(contents,onStep,opt){
+  opt=opt||{};
   const key=aiKey();if(!key)throw new Error("nokey");
   onStep&&onStep("使えるAIを調べています…");
   const list=(await aiModels(key)).slice(0,5);
@@ -1150,7 +1193,7 @@ async function aiCall(contents,onStep){
   for(const [i,model] of list.entries()){
     onStep&&onStep(`${model} につないでいます（${i+1}/${list.length}）…`);
     let r,j={};
-    try{r=await fetchTO(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},body:JSON.stringify({systemInstruction:{parts:[{text:TUT_SYS}]},contents,generationConfig:{temperature:0.4,maxOutputTokens:4096}})},25000)}
+    try{r=await fetchTO(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},body:JSON.stringify({systemInstruction:{parts:[{text:opt.sys||TUT_SYS}]},contents,generationConfig:{temperature:opt.temp!=null?opt.temp:0.4,maxOutputTokens:opt.sys?256:4096}})},25000)}
     catch(e){
       if(e.name==="AbortError"){last=new Error("timeout");last.detail=`（${model}：25秒たっても返事なし）`;if(lsGet(AI_MODEL)===model)lsSet(AI_MODEL,"");continue}
       const er=new Error("net");er.detail="";throw er}
@@ -1267,12 +1310,12 @@ function tutorVoice(q,done,first){
     if(Date.now()>until){vStatus("⏸ 聞き取りを休みました。「もう一度読む」で再開できます");return}
     vStatus(pendingCheck()?"🧑‍🏫 確認問題：「まる」か「ばつ」で答えてください（質問してもOK）":"🧑‍🏫 家庭教師：質問を話してください（「確認問題」で〇×・「わかりやすかった」で保存・「次」で問題に戻る）");
     vCollect("",{gap:3000,first:Math.max(1000,until-Date.now()),endRe:/[、。\s]*(以上|いじょう|送信|そうしん|おしまい)[。\s]*$/,
-      quick:t=>/^(次|つぎ|次へ|もういい|わかった|分かった|理解した|ありがとう|オッケー|おっけー|OK|やめ|ストップ|止めて|とめて|もう一度|もういちど|もう一回|もう1回|まる|ばつ|正しい|違う|ちがう|わかりやすかった|分かりやすかった|保存して)[。、\s]*$/i.test(t.trim()),
+      quick:t=>/^(もうええ|おおきに|次|つぎ|次へ|もういい|わかった|分かった|理解した|ありがとう|オッケー|おっけー|OK|やめ|ストップ|止めて|とめて|もう一度|もういちど|もう一回|もう1回|まる|ばつ|正しい|違う|ちがう|わかりやすかった|分かりやすかった|保存して)[。、\s]*$/i.test(kansai(t)),
       onUpdate:t=>vStatus("🧑‍🏫 「"+t+"」（言い終わったら3秒待つか「以上」）")},async t=>{
-      const c=t.replace(/[\s。、．,.!！?？]/g,"");
+      const c=kansai(t);
       if(/^(やめ|ストップ|止めて|とめて)/.test(c))return vEnd();
       if(/わかりやすかった|分かりやすかった|わかりやすい|分かりやすい|保存して|ほぞんして/.test(c)){const last=[...TUT.msgs].reverse().find(m=>m.role==="model");if(last){saveMine(q,last.text);tutorPaint(q)}return speak(last?"自分専用の解説として保存しました。次にこの問題が出たら最初に読みます。":"まだ説明していません。",()=>listen(until))}
-      if(/^(次|つぎ|次へ|もういい|わかった|分かった|理解した|ありがとう|オッケー|おっけー|OK)/i.test(c)){vStatus("問題に戻ります");return speak("では問題に戻ります。"+(!done?"合ってた？ 間違えた？":done.ok?"覚えた？ あやしい？":"次に進むときは、次、と言ってください。"),back)}
+      if(/^(次|つぎ|次へ|もういい|もうええ|おおきに|わかった|分かった|理解した|ありがとう|オッケー|おっけー|OK)/i.test(c)){vStatus("問題に戻ります");return speak("では問題に戻ります。"+(!done?"合ってた？ 間違えた？":done.ok?"覚えた？ あやしい？":"次に進むときは、次、と言ってください。"),back)}
       if(/^(もう一度|もういちど|もう一回|もう1回)$/.test(c)){const last=[...TUT.msgs].reverse().find(m=>m.role==="model");return speak(last?last.text:"まだ説明していません。",()=>listen(until))}
       const pend=pendingCheck(),w=pend&&vParse(t);
       if(pend&&(w==="o"||w==="x")){vStatus("🧑‍🏫 判定しています…");const r=await tutorAnswer(q,w,pend.i);return speak(r||TUT.err,()=>listen(Date.now()+V_WAIT))}
