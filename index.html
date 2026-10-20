@@ -838,8 +838,29 @@ const canSpeak="speechSynthesis" in window;
 const V_DEF={mode:"off",rate:1.2,head:true,barge:true};
 const vset=()=>Object.assign({},V_DEF,S.voice||{});
 let vOn=false,vRec=null,vBusy=false,vMicBlocked=false;
+// 式・記号を声で正しく読めるように言葉に直す（「1/3」→「3分の1」、「10－6」→「10ひく6」、「▲20万円」→「マイナス20万円」など）
+const V_OPD="0-9０-９)）%％円万億²³a-zA-Zσ」\\u4e00-\\u9fffァ-ヶ";
+function vMath(t){
+  return String(t)
+    .replace(/[－−]{2,}/g,"、")                                                    // 表の「－－」（空欄）は読まない
+    .replace(/[▲△]\s*(?=[0-9０-９])/g,"マイナス")
+    .replace(new RegExp("(?<=["+V_OPD+"])\\s*[－−‐]\\s*(?=[0-9０-９(（「\\u4e00-\\u9fffァ-ヶ])","g"),"ひく")
+    .replace(/(?<=[0-9０-９)）])\s*-\s*(?=[0-9０-９(（])/g,"ひく")
+    .replace(/(?<![a-zA-Zａ-ｚＡ-Ｚ])[－−‐-]\s*(?=[0-9０-９])/g,"マイナス")
+    .replace(new RegExp("(?<=["+V_OPD+"])\\s*[+＋]\\s*(?=[0-9０-９(（「\\u4e00-\\u9fffァ-ヶ])","g"),"たす")
+    .replace(/(?<![0-9０-９.,．/／])([0-9０-９]+)\s*[/／]\s*([0-9０-９]+)(?![0-9０-９/／])/g,"$2分の$1")   // 分数（日付と読まれないように）
+    .replace(/\^\s*[(（]([^()（）]+)[)）]/g,"の$1乗").replace(/\^\s*([0-9０-９.]+|年数)/g,"の$1乗").replace(/\^/g,"累乗")
+    .replace(/²/g,"の2乗").replace(/³/g,"の3乗").replace(/√/g,"ルート")
+    .replace(/≒/g,"およそ").replace(/[＝=]/g,"イコール").replace(/[＞>]/g,"大なり").replace(/[＜<]/g,"小なり").replace(/≧/g,"以上").replace(/≦/g,"以下")
+    .replace(/(?<=[0-9０-９])[:：](?=[0-9０-９])/g,"対")                              // 6：4 → 6対4
+    .replace(/(?<=[0-9０-９])\s*[ｍm](?![a-zA-Zａ-ｚ²2])/g,"メートル")
+    .replace(new RegExp("(?<=["+V_OPD+"])\\s*×","g"),"かける")                       // 式の×（日額×日数）
+    .replace(/※/g,"、").replace(/〃/g,"同じく").replace(/[→⇒]/g,"、")
+    .replace(/□+/g,"なになに").replace(/[＊*]+/g,"、").replace(/[―…]+/g,"、").replace(/[/／]/g,"、").replace(/±/g,"プラスマイナス")
+    .replace(/↑/g,"が上がる").replace(/↓/g,"が下がる").replace(/㎝/g,"センチ").replace(/[{}｛｝〔〕“”]/g,"");
+}
 function vClean(t){
-  return String(t).replace(/〇|○/g,"まる").replace(/×(?=\s*[0-9０-９(（一二三四五六七八九十])/g,"かける").replace(/÷/g,"わる").replace(/×/g,"ばつ").replace(/答え：/,"答えは、")   // 式の×は「かける」、〇×の×は「ばつ」
+  return vMath(String(t).replace(/（＝保険料負担者）/g,"")).replace(/〇|○/g,"まる").replace(/×(?=\s*[0-9０-９(（一二三四五六七八九十])/g,"かける").replace(/÷/g,"わる").replace(/×/g,"ばつ").replace(/答え：/,"答えは、")   // 式の×は「かける」、〇×の×は「ばつ」
     .replace(/（＝保険料負担者）/g,"").replace(/㎡/g,"平方メートル").replace(/～|〜/g,"から")
     .replace(/[（(]以下、「[^」]+」という[)）]/g,"")
     .replace(/[（(][^（）()0-9０-９]{1,4}[)）]/g,"")   // （日）（床）（円）などの単位の括弧は読まない（「曜日」などと誤読するため）
