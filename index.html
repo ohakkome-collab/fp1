@@ -1465,6 +1465,9 @@ function makePlan(){
   const tot=rest.reduce((s,q)=>s+W(q),0);
   const quota=Math.max(15,Math.min(80,Math.ceil(tot/Math.max(1,days))));
   const ids=[],th=[];let w=0;
+  // 前の日までにパスした問題は、翌日の予定のいちばん最初に戻す（忘れられないように）
+  const P=S.pass||{};
+  for(const q of passQ())if(P[q.id]<today()&&!card(q.id)){ids.push(q.id);w+=W(q)}
   for(const tid of order){
     const L=thItems(tid).filter(q=>!card(q.id)&&!(S.pass&&S.pass[q.id]));if(!L.length)continue;
     if(w>=quota)break;
@@ -1474,9 +1477,9 @@ function makePlan(){
       if(w>=quota&&L.length-k-1>6)break;   // 残りが少しならこのテーマを今日で終わらせる
     }
   }
-  return {d:today(),mode:"learn",ids,th,quota};
+  return {d:today(),mode:"learn",ids,th,quota,v:2};
 }
-function getPlan(){const c=C0();if(!c.plan||c.plan.d!==today()){c.plan=makePlan();save()}return c.plan}
+function getPlan(){const c=C0();if(!c.plan||c.plan.d!==today()||(c.plan.mode==="learn"&&c.plan.v!==2)){c.plan=makePlan();save()}return c.plan}
 function planItems(p){const M=AMAP();return p.ids.map(id=>M.get(id)).filter(Boolean)}
 // 1問あたりの時間：自分の最近の記録の中央値（記録が少ないうちは目安：〇×90秒・応用編12分）
 function perQ(){const t=S.tm||{},med=a=>{a=a.slice().sort((x,y)=>x-y);return a[Math.floor(a.length/2)]};return {b:(t.b||[]).length>=10?med(t.b):90,o:(t.o||[]).length>=3?med(t.o):720,nb:(t.b||[]).length,no:(t.o||[]).length}}
