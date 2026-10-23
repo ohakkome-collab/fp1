@@ -460,7 +460,7 @@ function dojoQ(q){
   if(!q.oyo)return {...q,dojo:true};
   const n=q.nw||{};
   if(!n.t)return {...q,dojo:true,same:n.same||""};
-  return {...q,dojo:true,t:n.t,ans:n.ans,st:n.st,e:n.st.join("\n"),lw:"",lb:{},nwNote:n.note||"",ct:n.ct||""};
+  return {...q,dojo:true,t:n.t,ans:n.ans,st:n.st,e:n.st.join("\n"),at:"（今の数字で解き直した計算）\n"+n.st.join("\n"),lw:"",lb:{},nwNote:n.note||"",ct:n.ct||""};
 }
 function dojoBanner(q){
   if(!q.dojo)return "";
@@ -1266,6 +1266,7 @@ const TUT_SYS=`あなたはFP1級学科試験（基礎編・応用編）の家�
 ・2026年10月1日時点の法令で説明する。下に渡す「アプリの解説」「法改正メモ」を正しい前提として扱い、食い違いそうなときは「公式の解説を優先してね」と添える。
 ・耳で聞いてもわかる話し言葉で、1回の返事は300字以内。箇条書き記号、太字、見出しなどの記号は使わない。
 ・相手がつまずいた点だけに絞り、具体例や数字を使って説明する。専門用語を使うときは、ひとことで意味も言う。
+・ほめ言葉、あいさつ、前置き（「すごいですね」「いい質問ですね」「素晴らしい」「お疲れさまです」など）は言わない。いきなり本題から話す。
 ・質問攻めにしない。説明したら、そこで終える。「わかりましたか？」「ほかに質問は？」などの問いかけも付けない。
 ・〇×問題は、相手が「確認問題を出して」と頼んだときだけ、同じポイントを別の角度から確かめる問題を1問出し、「まる？ ばつ？」で終える。
 ・間違えた〇×について説明を頼まれたら、別のたとえで説明し直すだけにして、新しい問題は出さない。
@@ -1273,7 +1274,7 @@ const TUT_SYS=`あなたはFP1級学科試験（基礎編・応用編）の家�
 <<確認|o|問題文|ひとことの理由>>　（正しい文なら o、誤りの文なら x。問題文は「まる？ ばつ？」を除いた文だけ）`;
 function tutorContext(q){
   if(q.oyo){const cs=OYC[q.case]||{};return `【問題】${oyoLabel(q)}（記述式）
-【設例】${(cs.t||"").slice(0,2500)}
+【設例】${(q.ct||cs.t||"").slice(0,2500)}
 【問】${q.t}
 【模範解答】${q.ans.map(([k,a])=>k+a).join("　")}
 【模範解答の計算過程】${(q.at||"").slice(0,1500)}
@@ -1431,12 +1432,18 @@ function tutorVoice(q,done,first){
     if(Date.now()>until){vStatus("⏸ 聞き取りを休みました。「もう一度読む」で再開できます");return}
     vStatus(pendingCheck()?"🧑‍🏫 確認問題：「まる」か「ばつ」で答えてください（質問してもOK）":"🧑‍🏫 家庭教師：質問を話してください（「確認問題」で〇×・「わかりやすかった」で保存・「次」で問題に戻る）");
     vCollect("",{gap:3000,first:Math.max(1000,until-Date.now()),endRe:/[、。\s]*(以上|いじょう|送信|そうしん|おしまい)[。\s]*$/,
-      quick:t=>/^(もうええ|おおきに|次|つぎ|次へ|もういい|わかった|分かった|理解した|ありがとう|オッケー|おっけー|OK|やめ|ストップ|止めて|とめて|もう一度|もういちど|もう一回|もう1回|まる|ばつ|正しい|違う|ちがう|わかりやすかった|分かりやすかった|保存して)[。、\s]*$/i.test(kansai(t)),
+      quick:t=>/^(覚えた|できた|あやしい|間違えた|合ってた|合ってる|次の問題|もうええ|おおきに|次|つぎ|次へ|もういい|わかった|分かった|理解した|ありがとう|オッケー|おっけー|OK|やめ|ストップ|止めて|とめて|もう一度|もういちど|もう一回|もう1回|まる|ばつ|正しい|違う|ちがう|わかりやすかった|分かりやすかった|保存して)[。、\s]*$/i.test(kansai(t)),
       onUpdate:t=>vStatus("🧑‍🏫 「"+t+"」（言い終わったら3秒待つか「以上」）")},async t=>{
       const c=kansai(t);
       if(/^(やめ|ストップ|止めて|とめて)/.test(c))return vEnd();
       if(/わかりやすかった|分かりやすかった|わかりやすい|分かりやすい|保存して|ほぞんして/.test(c)){const last=[...TUT.msgs].reverse().find(m=>m.role==="model");if(last){saveMine(q,last.text);tutorPaint(q)}return speak(last?"自分専用の解説として保存しました。次にこの問題が出たら最初に読みます。":"まだ説明していません。",()=>listen(until))}
-      if(/^(次|つぎ|次へ|もういい|もうええ|おおきに|わかった|分かった|理解した|ありがとう|オッケー|おっけー|OK)/i.test(c)){vStatus("問題に戻ります");return speak("では問題に戻ります。"+(!done?"合ってた？ 間違えた？":done.ok?"覚えた？ あやしい？":"次に進むときは、次、と言ってください。"),back)}
+      // 「覚えた」「あやしい」「間違えた」「次」などの短い合図は、AIに送らず（ほめ言葉なども言わずに）そのまま採点して次の問題へ
+      const w0=c.length<=8?vParse(t):null;
+      if(["sure","unsure","miss","next"].includes(w0)){
+        if(q.oyo){if(oyoWord(q,done,w0))return}
+        else if(done){vStatus("次へ進みます");return rate(q,done.ok?(w0==="unsure"?"unsure":w0==="miss"?"wrong":"sure"):"wrong")}
+      }
+      if(c.length<=8&&/^(次|つぎ|次へ|もういい|もうええ|おおきに|わかった|分かった|理解した|ありがとう|オッケー|おっけー|OK)/i.test(c)){vStatus("問題に戻ります");return speak("では問題に戻ります。"+(!done?"合ってた？ 間違えた？":done.ok?"覚えた？ あやしい？":"次に進むときは、次、と言ってください。"),back)}
       if(/^(もう一度|もういちど|もう一回|もう1回)$/.test(c)){const last=[...TUT.msgs].reverse().find(m=>m.role==="model");return speak(last?last.text:"まだ説明していません。",()=>listen(until))}
       const pend=pendingCheck(),w=pend&&vParse(t);
       if(pend&&(w==="o"||w==="x")){vStatus("🧑‍🏫 判定しています…");const r=await tutorAnswer(q,w,pend.i);return speak(r||TUT.err,()=>listen(Date.now()+V_WAIT))}
