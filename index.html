@@ -1593,14 +1593,18 @@ function paceHTML(X){
   const solved=Object.keys(S.cards||{}).length,lrn=X.filter(x=>x.s.st==="lrn").length;
   let w7=0;for(let i=0;i<7;i++)w7+=(S.log||{})[addDays(-i)]||0;const avg=Math.round(w7/7);
   const d=daysLeft(),fin=finDays(d),days=Math.max(1,d>fin?d-fin:d);
-  const rest=THEMES.reduce((n,t)=>n+thItems(t.id).filter(q=>!card(q.id)).length,0),need=Math.ceil(rest/days);
+  // 1周目：まだ解いていない問題を試験までに。2周目：それに加えて全部の問題をもう1回
+  const all=THEMES.reduce((n,t)=>n+thItems(t.id).length,0);
+  const rest=THEMES.reduce((n,t)=>n+thItems(t.id).filter(q=>!card(q.id)).length,0),need=Math.ceil(rest/days),need2=Math.ceil((rest+all)/days);
+  const two=`1日 約${need2}問にすれば、試験までに2周目も終わります。`;
   let msg;
   if(!solved)msg="まずは今日のレッスンから。解くたびにここが進んでいきます。";
-  else if(!rest)msg="1周目の問題は全部解き終わりました！ここからは復習で定着させていきましょう。";
-  else if(!w7)msg=`おかえりなさい。今日のレッスンから再開すれば大丈夫です（目安は1日 約${need}問）。`;
-  else if(avg>=need)msg=`いいペースです！最近は1日 約${avg}問。このままで試験までに1周目が終わります。`;
-  else if(avg>=need*0.7)msg=`ほぼ順調です。最近は1日 約${avg}問。1日 約${need}問できると、1周目が余裕をもって終わります。`;
-  else msg=`今のペースでも大丈夫。できる日に少し多めにやれば追いつけます（目安は1日 約${need}問、最近は約${avg}問）。`;
+  else if(!rest)msg=`1周目の問題は全部解き終わりました！1日 約${Math.ceil(all/days)}問で、試験までに2周目が終わります。`;
+  else if(!w7)msg=`おかえりなさい。今日のレッスンから再開すれば大丈夫です。1日 約${need}問で1周目が終わり、${two}`;
+  else if(avg>=need2)msg=`すごいペースです！最近は1日 約${avg}問。このままなら試験までに2周目も終わります。`;
+  else if(avg>=need)msg=`いいペースです！最近は1日 約${avg}問。このままで1周目が終わります。${two}`;
+  else if(avg>=need*0.7)msg=`ほぼ順調です。最近は1日 約${avg}問。1日 約${need}問で1周目が余裕をもって終わり、${two}`;
+  else msg=`今のペースでも大丈夫。できる日に少し多めにやれば追いつけます。1日 約${need}問で1周目が終わり、頑張って${two}`;
   return `<div class="ostep"><p style="margin:0">これまでに解いた問題 <b>${solved.toLocaleString()}問</b>${lrn?`・学習中のテーマ <b>${lrn}</b>`:""}</p><p style="margin:4px 0 0">${msg}</p></div>`;
 }
 // 進み具合の地図（点数は出さない）
