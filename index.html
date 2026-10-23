@@ -172,6 +172,9 @@ label.chk input{width:auto;min-height:0}
 .lsn{margin:0;padding-left:1.3em;line-height:1.85}.lsn li{margin-bottom:8px}
 .oblanks{display:flex;flex-wrap:wrap;gap:6px}
 .ocur{color:var(--accent);background:var(--accent-soft,rgba(0,0,0,.06));border-radius:4px;padding:0 2px}
+.presum{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--bg)}
+.presum .pr{display:grid;grid-template-columns:8em 1fr;gap:8px;padding:5px 0;border-top:1px dashed var(--line);font-size:.92rem;line-height:1.6}
+.presum .label+.pr{border-top:0}
 .qtext.sets{font-size:.9rem;line-height:1.7;max-height:55vh;overflow:auto}
 .qtext mark{background:var(--ok-soft);color:inherit;border-radius:4px;padding:0 2px}
 .oans{background:var(--ok-soft);border:1px solid var(--ok);border-radius:8px;padding:10px 12px;font-size:1.15rem}.oans b{color:var(--accent);margin-right:6px}
@@ -467,8 +470,10 @@ function dojoBanner(q){
 }
 // 設例（年齢・家族・加入歴などの前提）を文字で見せる
 function setsHTML(q,cs,imgs,open){
-  const t=q.ct||cs.t||"";
-  return `<details class="imgbox" ${open?"open":""}><summary>【第${q.g}問】設例（前提：年齢・家族・加入歴など）</summary>${t?`<p class="qtext sets">${esc(t)}</p>`:""}<details class="imgbox"><summary>設例の問題用紙の画像を見る${q.nwNote?"（当時の数字のまま）":""}</summary>${imgs(cs.pg)}</details></details>`;
+  const t=q.ct||cs.t||"",S=cs.sum||[];
+  // 前提まとめ（人・年齢・働き方・年金の加入歴）はいつも見える場所に。設例の全文はたたんでおく
+  const pre=S.length?`<div class="presum"><div class="label">前提まとめ（設例より）</div>${S.map(([h,v])=>`<div class="pr"><b>${esc(h)}</b><span>${esc(v)}</span></div>`).join("")}</div>`:"";
+  return pre+`<details class="imgbox" ${open&&!S.length?"open":""}><summary>【第${q.g}問】設例の全文${S.length?"を見る":"（前提：年齢・家族・加入歴など）"}</summary>${t?`<p class="qtext sets">${esc(t)}</p>`:""}<details class="imgbox"><summary>設例の問題用紙の画像を見る${q.nwNote?"（当時の数字のまま）":""}</summary>${imgs(cs.pg)}</details></details>`;
 }
 function dojoItems(){
   const o=OY.filter(q=>q.calc),b=PQ.filter(q=>!q.oyo&&q.img);
