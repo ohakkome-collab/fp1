@@ -1593,18 +1593,25 @@ function paceHTML(X){
   const solved=Object.keys(S.cards||{}).length,lrn=X.filter(x=>x.s.st==="lrn").length;
   let w7=0;for(let i=0;i<7;i++)w7+=(S.log||{})[addDays(-i)]||0;const avg=Math.round(w7/7);
   const d=daysLeft(),fin=finDays(d),days=Math.max(1,d>fin?d-fin:d);
-  // 1周目：まだ解いていない問題を試験までに。2周目：それに加えて全部の問題をもう1回
-  const all=THEMES.reduce((n,t)=>n+thItems(t.id).length,0);
-  const rest=THEMES.reduce((n,t)=>n+thItems(t.id).filter(q=>!card(q.id)).length,0),need=Math.ceil(rest/days),need2=Math.ceil((rest+all)/days);
-  const two=`1日 約${need2}問にすれば、試験までに2周目も終わります。`;
+  // 1周目：まだ解いていない問題を全部。2周目：全部の問題をもう1回。2周目は1周目の1.3倍の速さで進む前提で、終わる日を出す
+  const SP2=1.3,all=THEMES.reduce((n,t)=>n+thItems(t.id).length,0);
+  const rest=THEMES.reduce((n,t)=>n+thItems(t.id).filter(q=>!card(q.id)).length,0);
+  const md=x=>{const a=x.split("-");return +a[1]+"月"+(+a[2])+"日"},finD=addDays(days);
+  const need1=Math.ceil(rest/days),need2=Math.ceil((rest+all/SP2)/days);   // 仕上げ（試験の約3週間前）までに 1周目／2周目まで 終えるための1周目の1日の量
+  const when=v=>{const d1=Math.ceil(rest/v),d2=d1+Math.ceil(all/(SP2*v));return {d1:addDays(d1),d2:addDays(d2)}};
+  const plan2=`2周目まで狙うなら、1周目は1日 約${need2}問（2周目に入ると同じ時間で1日 約${Math.round(need2*SP2)}問進みます）で、仕上げ（${md(finD)}〜）までに2周目も終わります。`;
+  const ex=S.exam;   // 試験日より先の日付は出さない
   let msg;
   if(!solved)msg="まずは今日のレッスンから。解くたびにここが進んでいきます。";
-  else if(!rest)msg=`1周目の問題は全部解き終わりました！1日 約${Math.ceil(all/days)}問で、試験までに2周目が終わります。`;
-  else if(!w7)msg=`おかえりなさい。今日のレッスンから再開すれば大丈夫です。1日 約${need}問で1周目が終わり、${two}`;
-  else if(avg>=need2)msg=`すごいペースです！最近は1日 約${avg}問。このままなら試験までに2周目も終わります。`;
-  else if(avg>=need)msg=`いいペースです！最近は1日 約${avg}問。このままで1周目が終わります。${two}`;
-  else if(avg>=need*0.7)msg=`ほぼ順調です。最近は1日 約${avg}問。1日 約${need}問で1周目が余裕をもって終わり、${two}`;
-  else msg=`今のペースでも大丈夫。できる日に少し多めにやれば追いつけます。1日 約${need}問で1周目が終わり、頑張って${two}`;
+  else if(!rest)msg=`1周目の問題は全部解き終わりました！2周目は1周目の1.3倍の速さで進めるので、1日 約${Math.ceil(all/SP2/days)}問のペースで仕上げ（${md(finD)}〜）までに2周目が終わります。`;
+  else if(!w7)msg=`おかえりなさい。今日のレッスンから再開すれば大丈夫です。${plan2}`;
+  else{
+    const w=when(avg);
+    msg=`最近は1日 約${avg}問。`+(w.d1>ex?"":w.d2>ex?`このペースなら1周目は<b>${md(w.d1)}</b>ごろに終わります。`:`このペースなら1周目は<b>${md(w.d1)}</b>、2周目は<b>${md(w.d2)}</b>ごろに終わります（2周目は1.3倍の速さで進む計算）。`);
+    if(w.d2<=finD)msg+=`仕上げ（${md(finD)}〜）までに2周目まで終わる、すごくいいペースです！`;
+    else if(w.d1<=finD)msg+=`1周目は仕上げまでに終わる、いいペースです。${plan2}`;
+    else msg+=`できる日に少し多めにやれば大丈夫。1日 約${need1}問にすると、1周目が仕上げ（${md(finD)}〜）までに終わります。${plan2}`;
+  }
   return `<div class="ostep"><p style="margin:0">これまでに解いた問題 <b>${solved.toLocaleString()}問</b>${lrn?`・学習中のテーマ <b>${lrn}</b>`:""}</p><p style="margin:4px 0 0">${msg}</p></div>`;
 }
 // 進み具合の地図（点数は出さない）
