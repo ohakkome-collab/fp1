@@ -1588,6 +1588,21 @@ function courseBind(){
   V.querySelector("#goCourse")?.addEventListener("click",startCourse);
   V.querySelector("#goMore")?.addEventListener("click",()=>{C0().plan=makePlan();save();startCourse()});
 }
+// ペースのひとこと：責めずに、続けられる目安を出す（最近7日の平均と、試験までに1周目を終える目安を比べる）
+function paceHTML(X){
+  const solved=Object.keys(S.cards||{}).length,lrn=X.filter(x=>x.s.st==="lrn").length;
+  let w7=0;for(let i=0;i<7;i++)w7+=(S.log||{})[addDays(-i)]||0;const avg=Math.round(w7/7);
+  const d=daysLeft(),fin=finDays(d),days=Math.max(1,d>fin?d-fin:d);
+  const rest=THEMES.reduce((n,t)=>n+thItems(t.id).filter(q=>!card(q.id)).length,0),need=Math.ceil(rest/days);
+  let msg;
+  if(!solved)msg="まずは今日のレッスンから。解くたびにここが進んでいきます。";
+  else if(!rest)msg="1周目の問題は全部解き終わりました！ここからは復習で定着させていきましょう。";
+  else if(!w7)msg=`おかえりなさい。今日のレッスンから再開すれば大丈夫です（目安は1日 約${need}問）。`;
+  else if(avg>=need)msg=`いいペースです！最近は1日 約${avg}問。このままで試験までに1周目が終わります。`;
+  else if(avg>=need*0.7)msg=`ほぼ順調です。最近は1日 約${avg}問。1日 約${need}問できると、1周目が余裕をもって終わります。`;
+  else msg=`今のペースでも大丈夫。できる日に少し多めにやれば追いつけます（目安は1日 約${need}問、最近は約${avg}問）。`;
+  return `<div class="ostep"><p style="margin:0">これまでに解いた問題 <b>${solved.toLocaleString()}問</b>${lrn?`・学習中のテーマ <b>${lrn}</b>`:""}</p><p style="margin:4px 0 0">${msg}</p></div>`;
+}
 // 進み具合の地図（点数は出さない）
 function mapHTML(){
   if(pqState!=="ok")return"";
@@ -1595,10 +1610,11 @@ function mapHTML(){
   const mast=X.filter(x=>x.s.st==="mast").length,round=X.filter(x=>x.s.st==="done"||x.s.st==="mast").length;
   const fs=[...new Set(THEMES.map(t=>t.f))];
   return `<section class="card stack">
-    <div class="row" style="justify-content:space-between"><h2>🗺 進み具合の地図</h2><span class="muted">習得したテーマ ${mast}/${THEMES.length}</span></div>
-    <div class="legend"><span style="--c:var(--line)">これから</span><span style="--c:var(--accent)">学習中</span><span style="--c:var(--ok-soft);">一周した</span><span style="--c:var(--ok)">習得</span></div>
+    <div class="row" style="justify-content:space-between"><h2>🗺 進み具合の地図</h2><span class="muted">${round<THEMES.length?`1周目が終わったテーマ ${round}/${THEMES.length}`:`定着したテーマ ${mast}/${THEMES.length}`}</span></div>
+    ${paceHTML(X)}
+    <div class="legend"><span style="--c:var(--line)">これから</span><span style="--c:var(--accent)">学習中</span><span style="--c:var(--ok-soft);">1周目おわり</span><span style="--c:var(--ok)">定着</span></div>
     ${fs.map(f=>`<div><div class="label" style="margin-bottom:4px">${CATS[FCAT[f]]}</div><div class="tmap">${X.filter(x=>x.t.f===f).map(x=>`<button class="tdot ${x.s.st}" data-th="${x.t.id}">${esc(shortTh(x.t.n))}</button>`).join("")}</div></div>`).join("")}
-    <p class="note" style="margin:0">一周したテーマ ${round}・習得 ${mast}（問題の8割が定着）。テーマをタップすると、3分レッスンとそのテーマの問題が開きます。</p>
+    <p class="note" style="margin:0">${round<THEMES.length?"全テーマの1周目が終わると、次は「定着したテーマ（問題の8割が身についた）」を数えます。":"1周目は全部終わりました。今は定着（問題の8割が身についた）を数えています。"}テーマをタップすると、3分レッスンとそのテーマの問題が開きます。</p>
   </section>`;
 }
 function mapBind(){V.querySelectorAll("[data-th]").forEach(b=>b.addEventListener("click",()=>{lesson={queue:[b.dataset.th],i:0,then:null};render()}))}
