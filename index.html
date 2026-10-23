@@ -954,7 +954,7 @@ function vClean(t){
 }
 /* 読み上げの途中でも「パス」「次」などの短い合図だけは聞き取る（手放しモード）。
    アプリ自身の声を拾って誤作動しないように、短く言い切った決まった言葉だけを受け付ける */
-let vBarge=null;
+let vBarge=null,vEcho=new Set(),vEchoAll="";
 const B_ANY=[[/^(パス|ぱす|pass|スキップ|すきっぷ)$/i,"pass"],[/^(ストップ|すとっぷ|やめて|止めて|とめて|やめる)$/,"stop"],[/^(覚えた|おぼえた|オボエタ|できた|出来た|合ってた|あってた|正解|せいかい)$/,"sure"],[/^(あやしい|怪しい|アヤシイ)$/,"unsure"],[/^(まちがえた|間違えた|できなかった|間違い|まちがい|不正解)$/,"miss"]];
 const B_FIN=[[/^(次|つぎ|ツギ|次へ|つぎへ|ネクスト|next)$/i,"next"],[/^(答え|こたえ|コタエ)$/,"reveal"],
   [/^(正しい|ただしい|正しいです|まる|マル|丸|〇|○|◯|正解|せいかい|適切|てきせつ|合ってる|合ってた|あってる|あってた)$/,"o"],
@@ -966,7 +966,7 @@ function bargeStop(){const r=vBarge;vBarge=null;try{r&&r.abort()}catch(e){}}
 function bargeStart(onCmd,onCalc){
   if(!onCmd||!SR||vMicBlocked||!vOn||vset().mode!=="free"||vset().barge===false)return;
   bargeStop();const r=new SR();vBarge=r;r.lang="ja-JP";r.interimResults=true;r.continuous=true;r.maxAlternatives=5;
-  r.onresult=e=>{if(vBarge!==r)return;for(let i=e.resultIndex;i<e.results.length;i++){if(onCalc&&e.results[i].isFinal){const ca=[...e.results[i]].find(a=>CALC_HEAD.test(a.transcript));if(ca&&onCalc(ca.transcript))return}for(const a of e.results[i]){const w=bargeParse(a.transcript,e.results[i].isFinal);if(w&&onCmd(w))return}}};
+  r.onresult=e=>{if(vBarge!==r)return;for(let i=e.resultIndex;i<e.results.length;i++){if(onCalc&&e.results[i].isFinal){const ca=[...e.results[i]].find(a=>CALC_HEAD.test(a.transcript));if(ca&&onCalc(ca.transcript))return}for(const a of e.results[i]){const n=kansai(a.transcript);if(vEcho.has(n))continue;const w=bargeParse(a.transcript,e.results[i].isFinal);if(w==="stop"&&n&&vEchoAll.includes(n))continue;if(w&&onCmd(w))return}}};   // アプリ自身の声は合図にしない
   r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"||e.error==="audio-capture"){vMicBlocked=true;vBarge=null}};
   r.onend=()=>{if(vBarge===r){try{r.start()}catch(_){vBarge=null}}};   // 読み上げが終わるまで聞き続ける
   try{r.start()}catch(e){vBarge=null}
@@ -976,12 +976,20 @@ function speak(text,cb,onCmd){
   {const r=vRec;vRec=null;try{r&&r.abort()}catch(e){}}  // ふつうの聞き取りは止める（自分の声を拾わないように）
   bargeStop();
   speechSynthesis.cancel();
-  const u=new SpeechSynthesisUtterance(vClean(text));
-  u.lang="ja-JP";u.rate=vset().rate;
-  const ja=speechSynthesis.getVoices().find(v=>/^ja/i.test(v.lang));if(ja)u.voice=ja;
+  const said=vClean(text);
+  // アプリ自身の声（「正解。」「不正解。」など）を、あなたの合図と聞き間違えないように、読み上げる文の短い言葉を覚えておく
+  // （「正しい？違う？」「覚えた？あやしい？」などの問いかけの言葉は、あなたの答えなので除く）
+  vEcho=new Set(said.split(/[。、？！?!\s]+/).map(kansai).filter(x=>x&&x.length<=6&&!/^(正しい|違う|わからない|覚えた|あやしい|合ってた|合ってる|間違えた|答え)$/.test(x)));
+  vEchoAll=kansai(said);
+  // 長い文を一度に読ませるとスマホのChromeが途中で止まるので、文ごとに分けて続けて読む
+  const parts=[];for(const t of said.match(/[^。]+。?/g)||[said]){if(parts.length&&parts[parts.length-1].length+t.length<=120)parts[parts.length-1]+=t;else parts.push(t)}
+  const ja=speechSynthesis.getVoices().find(v=>/^ja/i.test(v.lang));
   let done=false;const fin=()=>{if(done)return;done=true;bargeStop();cb&&cb()};
-  u.onend=fin;u.onerror=fin;
-  speechSynthesis.speak(u);
+  parts.forEach((t,i)=>{
+    const u=new SpeechSynthesisUtterance(t);u.lang="ja-JP";u.rate=vset().rate;if(ja)u.voice=ja;
+    if(i===parts.length-1){u.onend=fin;u.onerror=fin}
+    speechSynthesis.speak(u);
+  });
   if(onCmd)bargeStart(w=>{if(done)return true;const go=onCmd(w);if(!go)return false;done=true;bargeStop();speechSynthesis.cancel();setTimeout(go,0);return true},
     t=>{if(done)return true;done=true;bargeStop();speechSynthesis.cancel();setTimeout(()=>vCalcListen(t,cb),0);return true});
 }
