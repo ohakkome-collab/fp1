@@ -1277,7 +1277,7 @@ function voiceSettingsBind(){
 
 /* ===== AI家庭教師（Gemini 無料枠）＋ Claudeに聞く =====
    キーはこの端末のブラウザの中（localStorage）にだけ保存する。公開ページや同期データには入れない。 */
-const AI_KEY="fp1_gemini_key",AI_MODEL="fp1_gemini_model",AI_USE="fp1_ai_use";
+const AI_KEY="fp1_gemini_key",AI_MODEL="fp1_gemini_model",AI_USE="fp1_ai_use",AI_LAST="fp1_gemini_last";
 const lsGet=k=>{try{return localStorage.getItem(k)||""}catch(e){return""}};
 const lsSet=(k,v)=>{try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}};
 const ON_PAGES=/github\.io$|^localhost$|^127\.0\.0\.1$/.test(location.hostname);   // 家庭教師（Gemini）はGitHub Pages版で使う
@@ -1335,21 +1335,22 @@ async function aiCall(contents,onStep,opt){
   const key=aiKey();if(!key)throw new Error("nokey");
   onStep&&onStep("使えるAIを調べています…");
   const list=(await aiModels(key)).slice(0,5);
-  let last=null;
+  let last=null;const fails=[];
   for(const [i,model] of list.entries()){
     onStep&&onStep(`${model} につないでいます（${i+1}/${list.length}）…`);
     let r,j={};
     try{r=await fetchTO(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},body:JSON.stringify({systemInstruction:{parts:[{text:opt.sys||TUT_SYS}]},contents,generationConfig:{temperature:opt.temp!=null?opt.temp:0.4,maxOutputTokens:opt.sys?2048:4096}})},25000)}
     catch(e){
-      if(e.name==="AbortError"){last=new Error("timeout");last.detail=`（${model}：25秒たっても返事なし）`;if(!opt.sys&&lsGet(AI_MODEL)===model)lsSet(AI_MODEL,"");continue}
+      if(e.name==="AbortError"){last=new Error("timeout");last.detail=`（${model}：25秒たっても返事なし）`;fails.push(model+"：25秒たっても返事なし");if(!opt.sys&&lsGet(AI_MODEL)===model)lsSet(AI_MODEL,"");continue}
       const er=new Error("net");er.detail="";throw er}
     j=await r.json().catch(()=>({}));
     const msg=String(j&&j.error&&j.error.message||"");
     if(r.ok){
       const parts=(j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts)||[];
       const t=parts.filter(p=>!p.thought).map(p=>p.text||"").join("");
-      if(!t){last=new Error("empty");last.detail=aiDetail(r.status,{error:{message:(j.candidates&&j.candidates[0]&&j.candidates[0].finishReason)||(j.promptFeedback&&j.promptFeedback.blockReason)||"no text"}});continue}
-      if(!opt.sys&&!/lite/.test(model))lsSet(AI_MODEL,model);aiUse(true);   // 家庭教師で、軽量版でないときだけ覚える
+      if(!t){fails.push(model+"：返事が空");last=new Error("empty");last.detail=aiDetail(r.status,{error:{message:(j.candidates&&j.candidates[0]&&j.candidates[0].finishReason)||(j.promptFeedback&&j.promptFeedback.blockReason)||"no text"}});continue}
+      if(!opt.sys&&!/lite/.test(model))lsSet(AI_MODEL,model);aiUse(true);
+      if(!opt.sys)lsSet(AI_LAST,JSON.stringify({m:model,why:fails.join(" ／ "),d:today()}));   // 家庭教師で、軽量版でないときだけ覚える
       return t.replace(/\*\*|__|`|^#+\s*/gm,"").replace(/^\s*[-・*]\s+/gm,"").trim();
     }
     // キーそのものの問題は、ほかのモデルを試しても同じなので止める
@@ -1357,6 +1358,7 @@ async function aiCall(contents,onStep,opt){
     if(/location is not supported|not supported for the API use/i.test(msg)){const e=new Error("region");e.detail=aiDetail(r.status,j);throw e}
     // モデルが使えない・混雑・上限 → 次の候補を試す
     last=new Error(r.status===429?"limit":r.status===404?"model":"other");last.detail=aiDetail(r.status,j);
+    fails.push(model+"："+(r.status===429?"今日の無料の上限か混雑":r.status===404?"このキーでは使えない":"エラー")+aiDetail(r.status,j));
     if(!opt.sys&&lsGet(AI_MODEL)===model)lsSet(AI_MODEL,"");
   }
   throw last||new Error("other");
@@ -1485,11 +1487,13 @@ function tutorVoice(q,done,first){
 }
 function aiSettings(){
   if(!ON_PAGES)return `<section class="card stack"><h2>🧑‍🏫 AI家庭教師</h2><p class="note" style="margin:0">Geminiの家庭教師は <a href="${PAGES_URL}" target="_blank" rel="noopener">GitHub Pages版</a> で使えます。このページでは、解説の下の「Claudeで聞く」から質問できます。</p></section>`;
-  const k=aiKey(),m=lsGet(AI_MODEL);
+  if(/lite/.test(lsGet(AI_MODEL)||""))lsSet(AI_MODEL,"");   // 軽量版の記憶は消す
+  const k=aiKey();let L={};try{L=JSON.parse(lsGet(AI_LAST)||"{}")}catch(e){}
+  const m=L.m?L.m+(/lite/.test(L.m)?"（軽量版）":""):"";
   return `<section class="card stack">
     <h2>🧑‍🏫 AI家庭教師（Gemini・無料）</h2>
     <p class="note" style="margin:0">解説がわからないとき、その問題について質問できます。キーはこのスマホの中にだけ保存され、ほかの人には見えません。</p>
-    ${k?`<p style="margin:0">✅ 設定済み（キー末尾 …${esc(k.slice(-4))}${m?"・"+esc(m):""}）／今日の利用 ${aiUse()}回</p>`:`<ol class="note" style="margin:0;padding-left:1.2em">
+    ${k?`<p style="margin:0">✅ 設定済み（キー末尾 …${esc(k.slice(-4))}${m?"・"+esc(m):""}）／今日の利用 ${aiUse()}回</p>${L.m&&/lite/.test(L.m)&&L.why?`<p class="note" style="margin:0">前回は軽量版で答えました。上のAIが使えなかった理由：${esc(L.why)}</p>`:""}`:`<ol class="note" style="margin:0;padding-left:1.2em">
       <li><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio のキー作成ページ ↗</a> をGoogleアカウントで開く</li>
       <li>「APIキーを作成（Create API key）」を押し、できたキー（AIzaで始まる長い文字）をコピー</li>
       <li>下の欄に貼り付けて「保存して確認」を押す</li></ol>`}
