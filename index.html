@@ -954,6 +954,13 @@ function vClean(t){
 }
 /* 読み上げの途中でも「パス」「次」などの短い合図だけは聞き取る（手放しモード）。
    アプリ自身の声を拾って誤作動しないように、短く言い切った決まった言葉だけを受け付ける */
+// 「マイクの許可がない」以外のエラーは一時的なものとして聞き直す（続けて8回失敗したときだけ止める）
+let vMicFail=0;
+function micFatal(e){
+  if(e.error==="not-allowed"||e.error==="service-not-allowed")return true;
+  if(e.error==="audio-capture"){vMicFail++;return vMicFail>=8}
+  return false;
+}
 let vBarge=null,vEcho=new Set(),vEchoAll="";
 const B_ANY=[[/^(パス|ぱす|pass|スキップ|すきっぷ)$/i,"pass"],[/^(ストップ|すとっぷ|やめて|止めて|とめて|やめる)$/,"stop"],[/^(覚えた|おぼえた|オボエタ|できた|出来た|合ってた|あってた|正解|せいかい)$/,"sure"],[/^(あやしい|怪しい|アヤシイ)$/,"unsure"],[/^(まちがえた|間違えた|できなかった|間違い|まちがい|不正解)$/,"miss"]];
 const B_FIN=[[/^(次|つぎ|ツギ|次へ|つぎへ|ネクスト|next)$/i,"next"],[/^(答え|こたえ|コタエ)$/,"reveal"],
@@ -967,7 +974,7 @@ function bargeStart(onCmd,onCalc){
   if(!onCmd||!SR||vMicBlocked||!vOn||vset().mode!=="free"||vset().barge===false)return;
   bargeStop();const r=new SR();vBarge=r;r.lang="ja-JP";r.interimResults=true;r.continuous=true;r.maxAlternatives=5;
   r.onresult=e=>{if(vBarge!==r)return;for(let i=e.resultIndex;i<e.results.length;i++){if(onCalc&&e.results[i].isFinal){const ca=[...e.results[i]].find(a=>CALC_HEAD.test(a.transcript));if(ca&&onCalc(ca.transcript))return}for(const a of e.results[i]){const n=kansai(a.transcript);if(vEcho.has(n))continue;const w=bargeParse(a.transcript,e.results[i].isFinal);if(w==="stop"&&n&&vEchoAll.includes(n))continue;if(w&&onCmd(w))return}}};   // アプリ自身の声は合図にしない
-  r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"||e.error==="audio-capture"){vMicBlocked=true;vBarge=null}};
+  r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"){vMicBlocked=true;vBarge=null}};   // 読み上げ中の一時的なエラーでは止めない
   r.onend=()=>{if(vBarge===r){try{r.start()}catch(_){vBarge=null}}};   // 読み上げが終わるまで聞き続ける
   try{r.start()}catch(e){vBarge=null}
 }
@@ -1069,7 +1076,7 @@ function vCollect(prefix,o,onDone,onNone){
       if(o.quick&&f&&o.quick(text()))return end();                // 短い合図（次・わかった など）はすぐ
       arm(o.gap||2500);
     };
-    r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"||e.error==="audio-capture"){vMicBlocked=true;stop();onNone&&onNone("nomic")}};
+    r.onerror=e=>{if(micFatal(e)){vMicBlocked=true;stop();onNone&&onNone("nomic")}};
     r.onend=()=>{if(done||vRec!==r)return;base=text();cur="";setTimeout(()=>{if(!done)start()},150)};   // 止まっても聞き直す
     try{r.start()}catch(e){stop();onNone&&onNone("nomic")}
   };
@@ -1092,6 +1099,7 @@ function vListen(onWord,onNone){
   r.lang="ja-JP";r.interimResults=true;r.maxAlternatives=10;r.continuous=true;   // 黙っていてもすぐ切れないように続けて聞く
   let got=false;
   r.onresult=e=>{
+    vMicFail=0;
     if(got)return;
     // 途中経過も含めて、すべての候補から最初にわかった言葉を使う
     for(let i=e.resultIndex;i<e.results.length;i++){
@@ -1100,7 +1108,7 @@ function vListen(onWord,onNone){
       for(const a of e.results[i]){const w=vParse(a.transcript);if(w){got=true;try{r.abort()}catch(_){}vRec=null;onWord(w,a.transcript);return}}
     }
   };
-  r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"||e.error==="audio-capture"){vMicBlocked=true;got=true;onNone&&onNone("nomic")}};
+  r.onerror=e=>{if(micFatal(e)){vMicBlocked=true;got=true;onNone&&onNone("nomic")}};
   r.onend=()=>{if(vRec!==r)return;vRec=null;if(!got&&vOn)onNone&&onNone("none")};
   try{r.start()}catch(e){onNone&&onNone("nomic")}
 }
@@ -1410,7 +1418,7 @@ function vListenText(onText,onNone){
   const r=new SR();vRec=r;r.lang="ja-JP";r.interimResults=false;r.continuous=true;
   let got=false;
   r.onresult=e=>{if(got)return;for(let i=e.resultIndex;i<e.results.length;i++){if(e.results[i].isFinal){const t=e.results[i][0].transcript.trim();if(t){got=true;try{r.abort()}catch(_){}vRec=null;onText(t);return}}}};
-  r.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed"||e.error==="audio-capture"){vMicBlocked=true;got=true;onNone&&onNone("nomic")}};
+  r.onerror=e=>{if(micFatal(e)){vMicBlocked=true;got=true;onNone&&onNone("nomic")}};
   r.onend=()=>{if(vRec!==r)return;vRec=null;if(!got&&vOn)onNone&&onNone("none")};
   try{r.start()}catch(e){onNone&&onNone("nomic")}
 }
