@@ -469,8 +469,11 @@ function dojoBanner(q){
   return "";
 }
 // 設例（年齢・家族・加入歴などの前提）を文字で見せる
-function setsHTML(q,cs,imgs,open){
-  const t=q.ct||cs.t||"",S=cs.sum||[];
+// 設例の前提が答えに必要な空欄（計算問題はすべて必要）。それ以外の空欄は、ルールそのものを問う問題なので前提は出さない
+const PRE_NEED={"o2023_5_51":"①②","o2022_5_61":"③","o2022_5_65":"①","o2022_1_65":"③","o2026_9_65":"⑤","o2022_1_60":"①③⑤"};
+function needPre(q,x){if(q.calc||q.dojo)return true;const w=PRE_NEED[q.id];return !!w&&(!x||w.includes(x.k))}
+function setsHTML(q,cs,imgs,open,need){
+  const t=q.ct||cs.t||"",S=need?cs.sum||[]:[];open=open&&need;
   // 前提まとめ（人・年齢・働き方・年金の加入歴）はいつも見える場所に。設例の全文はたたんでおく
   const pre=S.length?`<div class="presum"><div class="label">前提まとめ（設例より）</div>${S.map(([h,v])=>`<div class="pr"><b>${esc(h)}</b><span>${esc(v)}</span></div>`).join("")}</div>`:"";
   return pre+`<details class="imgbox" ${open&&!S.length?"open":""}><summary>【第${q.g}問】設例の全文${S.length?"を見る":"（前提：年齢・家族・加入歴など）"}</summary>${t?`<p class="qtext sets">${esc(t)}</p>`:""}<details class="imgbox"><summary>設例の問題用紙の画像を見る${q.nwNote?"（当時の数字のまま）":""}</summary>${imgs(cs.pg)}</details></details>`;
@@ -1482,7 +1485,7 @@ function tutorVoice(q,done,first){
       setTimeout(()=>listen(until),300);
     });
   };
-  if(first)speak("家庭教師です。わからないところを話してください。言い終わったら、以上、と言うか、3秒待ってください。",()=>listen(Date.now()+V_WAIT));
+  if(first)speak("どうぞ。",()=>listen(Date.now()+V_WAIT));
   else listen(Date.now()+V_WAIT);
 }
 function aiSettings(){
@@ -1786,7 +1789,7 @@ function renderOyo(q){
   <section class="card stack">
     <div class="row" style="gap:6px"><span class="chip">${CATS[q.c]}</span><span class="chip">${oyoLabel(q)}</span>${th?`<span class="chip">${esc(shortTh(th.n))}</span>`:""}${c&&c.w&&!q.dojo?`<span class="chip ng">過去に${c.w}回ミス</span>`:""}</div>
     ${dojoBanner(q)}
-    ${setsHTML(q,cs,imgs,firstOfCase&&!done)}
+    ${setsHTML(q,cs,imgs,firstOfCase&&!done,needPre(q))}
     <p class="qtext">${gl(esc(q.t),SS)}</p>
     ${qpg.length?`<details class="imgbox"><summary>問題用紙のこのページを見る（表・式つき）${q.nwNote?"（当時の数字のまま）":""}</summary>${imgs(qpg)}</details>`:""}
     ${calcHTML(q)}
@@ -1832,7 +1835,7 @@ function renderOyoStep(q,P){
   <section class="card stack">
     <div class="row" style="gap:6px"><span class="chip">${CATS[q.c]}</span><span class="chip">${oyoLabel(q)}</span>${th?`<span class="chip">${esc(shortTh(th.n))}</span>`:""}${c&&c.w&&!q.dojo?`<span class="chip ng">過去に${c.w}回ミス</span>`:""}</div>
     ${dojoBanner(q)}
-    ${setsHTML(q,cs,imgs,r.cur===0&&!shown)}
+    ${setsHTML(q,cs,imgs,r.cur===0&&!shown,needPre(q,x))}
     <div class="label">${x.b?"空欄":"問"} ${x.k}　<span class="muted">（${P.length<r.all?"前回まちがえた空欄だけ ":"この問題の "}${r.cur+1} / ${P.length}）</span></div>
     ${x.pre?`<p class="qtext muted" style="font-size:.95rem">${oyoFill(q,x.pre,x.i)}</p>`:""}
     <p class="qtext">${x.b?oyoFill(q,x.s,x.i):esc(x.s)}</p>
