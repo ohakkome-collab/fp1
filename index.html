@@ -1676,6 +1676,7 @@ function courseHTML(){
       ${o.length?li(od===o.length,`応用編の穴埋めを ${o.length}問（${od}問済み）`):""}`}
       ${li(fin,"今日のぶん完了")}
     </ol>`:""}
+    <p style="margin:0">今日解いた問題：<b>${((S.log||{})[today()]||0).toLocaleString()}問</b>（レッスン・復習・習得・計算道場をぜんぶ合わせた数。ペースを変えても減りません）</p>
     ${fin?`<p style="margin:0">🎉 今日のぶんは完了です。${p.mode==="final"?"":"このペースで試験日までに全テーマを一周できます。"}</p><button class="btn block" id="goMore">もう少し進む</button>`
       :`<button class="btn primary block" id="goCourse">${bd+od?"続きから":"始める"}（約${Math.max(min,1)}分）</button>`}
     ${(()=>{const M=masterySets(),n=M.mine.length;return n||M.pre.length?`<button class="btn block" id="goMastery">🎯 習得に専念する（期限が来た問題を30問ずつ）<br><span class="muted">レッスン済み ${n}問${M.pre.length?`・そのあとレッスン前のテーマ ${M.pre.length}問`:""}</span></button>`:""})()}
