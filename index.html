@@ -444,14 +444,13 @@ const lessonDone=q=>!q.th||!!C0().read[q.th];   // テーマの3分レッスン�
 const unmastered=q=>{const c=card(q.id);return !!c&&c.d!==GRAD&&!isDojoQ(q)};   // 解いたことがあって、まだ卒業していない
 function masterySets(){
   const pr=q=>{const c=card(q.id);return (c.lr==="x"?0:1)},byDue=(a,b)=>pr(a)-pr(b)||(card(a.id).d<card(b.id).d?-1:card(a.id).d>card(b.id).d?1:0);
-  const U=ALL().filter(unmastered);
-  const done=U.filter(lessonDone),due=done.filter(q=>isDue(q.id)).sort(byDue),notYet=done.filter(q=>!isDue(q.id)).sort(byDue);
-  return {mine:due.concat(notYet),due:due.length,pre:U.filter(q=>!lessonDone(q)).sort(byDue)};
+  const U=ALL().filter(q=>unmastered(q)&&isDue(q.id));   // 期限が来た問題だけ（期限前は、間をあけた方が覚えるので出さない）
+  return {mine:U.filter(lessonDone).sort(byDue),pre:U.filter(q=>!lessonDone(q)).sort(byDue)};
 }
 function startMastery(){
   const M=masterySets();
   const goPre=()=>{start(M.pre,"習得に専念（レッスン前のテーマ）")};
-  if(M.mine.length){start(M.mine,"習得に専念");if(M.pre.length){session.then=goPre;session.thenLabel=`続き：レッスン前のテーマの、まだ身についていない問題（${M.pre.length}問）`}return}
+  if(M.mine.length){start(M.mine,"習得に専念");if(M.pre.length){session.then=goPre;session.thenLabel=`続き：レッスン前のテーマの復習（${M.pre.length}問）`}return}
   if(M.pre.length)return goPre();
   lesson=null;render();
 }
@@ -1649,7 +1648,7 @@ function courseHTML(){
     </ol>`:""}
     ${fin?`<p style="margin:0">🎉 今日のぶんは完了です。${p.mode==="final"?"":"このペースで試験日までに全テーマを一周できます。"}</p><button class="btn block" id="goMore">もう少し進む</button>`
       :`<button class="btn primary block" id="goCourse">${bd+od?"続きから":"始める"}（約${Math.max(min,1)}分）</button>`}
-    ${(()=>{const M=masterySets(),n=M.mine.length;return n||M.pre.length?`<button class="btn block" id="goMastery">🎯 習得に専念する（レッスン済み ${n}問${M.due?`・うち期限 ${M.due}問`:""}）${M.pre.length?`<br><span class="muted">そのあと、レッスン前のテーマ ${M.pre.length}問</span>`:""}</button>`:""})()}
+    ${(()=>{const M=masterySets(),n=M.mine.length;return n||M.pre.length?`<button class="btn block" id="goMastery">🎯 習得に専念する（レッスン済み ${n}問）${M.pre.length?`<br><span class="muted">そのあと、レッスン前のテーマ ${M.pre.length}問</span>`:""}</button>`:""})()}
     <p class="note" style="margin:0">所要時間の目安＝3分レッスン3分×テーマ数＋〇×${perQ().b}秒×問題数＋応用編${Math.round(perQ().o/60)}分×問題数（${perQ().nb>=10?"あなたの最近の実績":"記録がたまるまでの仮の値"}）。</p>
     <p class="note" style="margin:0">${d>=0?`試験日（${S.exam.replace(/-/g,"/")}）から逆算して、1日の量を自動で決めています。やれなかった日があっても、翌日以降に少しずつ振り分け直します。`:"下の「試験日」を入れると、1日の量を自動で決めます。"}</p>
   </section>`;
