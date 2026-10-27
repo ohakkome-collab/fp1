@@ -867,6 +867,7 @@ function rate(q,how,res){
   // 1問にかかった時間（出題〜次へ）を記録。10分を超えたら席を外していたとみなして記録しない
   if(session&&session.t0id===q.id){const sec=Math.round((Date.now()-session.t0)/1000);if(sec>=3&&sec<=600){S.tm=S.tm||{b:[],o:[]};const k=q.oyo?"o":"b";S.tm[k].push(sec);S.tm[k]=S.tm[k].slice(-(q.oyo?20:60))}}
   const first=!S.cards[q.id],c=S.cards[q.id]||{b:0,c:0,w:0};
+  if(!first&&session&&session.lap===2)c.l2=today();
   if(first){S.nlog=S.nlog||{};S.nlog[today()]=(S.nlog[today()]||0)+1;if(!S.nlogStart)S.nlogStart=today()}   // ペース用：初めて解いた問題の数
   if(how==="wrong"){c.b=0;c.w++;c.lr="x";c.d=addDays(STEPS[0])}
   else if(how==="unsure"){c.c++;c.lr="o";c.b=1;c.d=addDays(STEPS[1])}
@@ -1591,21 +1592,29 @@ function finalItems(){
   const sc=q=>{const c=card(q.id);if(!c)return -1;let v=0;if(c.lr==="x")v+=4;v+=Math.min(c.w||0,3);if((c.b||0)<3)v+=1;if(changed(q))v+=2;if(q.oyo)v+=1;return v};
   return A.map(q=>[q,sc(q)]).filter(([q,v])=>v>=2).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
 }
+const pace=()=>Object.assign({m:"1",n:40},S.pace||{});
+const paceKey=()=>{const P=pace();return P.m==="n"?"n"+P.n:P.m};
 function makePlan(){
-  const d=daysLeft(),fin=finDays(d),order=THEMES.map(t=>t.id);
+  const d=daysLeft(),fin=finDays(d),order=THEMES.map(t=>t.id),PC=pace();
   const W=q=>q.oyo?4:1;
   const rest=[];order.forEach(t=>thItems(t).forEach(q=>{if(!card(q.id))rest.push(q)}));
+  // 2周目：解いたことがあって、2周目にまだ解いていない問題（卒業した問題も含めてもう一度）
+  const lap2=!rest.length&&PC.m==="2";
+  const rest2=lap2?order.flatMap(t=>thItems(t).filter(q=>{const c=card(q.id);return c&&!c.l2})):[];
   const weak=finalItems();
-  if((d>=0&&d<=fin&&weak.length>=10)||(!rest.length&&weak.length))return {d:today(),mode:"final",ids:weak.slice(0,40).map(q=>q.id),th:[]};
+  if((d>=0&&d<=fin&&weak.length>=10)||(!rest.length&&!rest2.length&&weak.length))return {d:today(),mode:"final",ids:weak.slice(0,40).map(q=>q.id),th:[],v:4,pm:paceKey()};
   const days=d>fin?d-fin:Math.max(d,1);
-  const tot=rest.reduce((s,q)=>s+W(q),0);
-  const quota=Math.max(15,Math.min(80,Math.ceil(tot/Math.max(1,days))));
+  const all=order.reduce((n,t)=>n+thItems(t).reduce((s,q)=>s+W(q),0),0);
+  const tot=(lap2?rest2:rest).reduce((s,q)=>s+W(q),0);
+  const quota=PC.m==="n"?Math.max(5,+PC.n||40)
+    :PC.m==="2"&&!lap2?Math.max(15,Math.min(150,Math.ceil((tot+all/1.3)/Math.max(1,days))))   // 2周目まで終える量（2周目は1.3倍の速さ）
+    :Math.max(15,Math.min(PC.m==="2"?150:80,Math.ceil(tot/Math.max(1,days))));
   const ids=[],th=[];let w=0;
   // 前の日までにパスした問題は、翌日の予定のいちばん最初に戻す（忘れられないように）
   const P=S.pass||{};
   for(const q of passQ())if(P[q.id]<today()&&!card(q.id)&&!isDojoQ(q)){ids.push(q.id);w+=W(q)}
   for(const tid of order){
-    const L=thItems(tid).filter(q=>!card(q.id)&&!(S.pass&&S.pass[q.id]));if(!L.length)continue;
+    const L=lap2?thItems(tid).filter(q=>{const c=card(q.id);return c&&!c.l2}):thItems(tid).filter(q=>!card(q.id)&&!(S.pass&&S.pass[q.id]));if(!L.length)continue;
     if(w>=quota)break;
     th.push(tid);
     for(let k=0;k<L.length;k++){
@@ -1613,9 +1622,21 @@ function makePlan(){
       if(w>=quota&&L.length-k-1>6)break;   // 残りが少しならこのテーマを今日で終わらせる
     }
   }
-  return {d:today(),mode:"learn",ids,th,quota,v:3};
+  return {d:today(),mode:"learn",ids,th,quota,v:4,pm:paceKey(),lap:lap2?2:1};
 }
-function getPlan(){const c=C0();if(!c.plan||c.plan.d!==today()||(c.plan.mode==="learn"&&c.plan.v!==3)){c.plan=makePlan();save()}return c.plan}
+function getPlan(){
+  const c=C0(),old=c.plan;
+  if(!old||old.d!==today()||old.v!==4||old.pm!==paceKey()){
+    const p=makePlan();
+    if(old&&old.d===today()&&p.mode===old.mode){
+      const M=AMAP(),keep=(old.ids||[]).filter(id=>{const k=card(id);return k&&k.t===today()});
+      p.ids=[...new Set(keep.concat(p.ids))];
+      p.th=[...new Set(keep.map(id=>(M.get(id)||{}).th).filter(t=>t&&(old.th||[]).includes(t)).concat(p.th))];
+    }
+    c.plan=p;save();
+  }
+  return c.plan;
+}
 function planItems(p){const M=AMAP();return p.ids.map(id=>M.get(id)).filter(q=>q&&!isDojoQ(q))}   // 計算問題は計算道場で解くので、今日の予定には出さない
 // 1問あたりの時間：自分の最近の記録の中央値（記録が少ないうちは目安：〇×90秒・応用編12分）
 function perQ(){const t=S.tm||{},med=a=>{a=a.slice().sort((x,y)=>x-y);return a[Math.floor(a.length/2)]};return {b:(t.b||[]).length>=10?med(t.b):90,o:(t.o||[]).length>=3?med(t.o):720,nb:(t.b||[]).length,no:(t.o||[]).length}}
@@ -1623,10 +1644,10 @@ const doneToday=(q,p)=>{const c=card(q.id);return !!(c&&c.t===p.d)};
 function startCourse(){
   const p=getPlan(),pend=planItems(p).filter(q=>!doneToday(q,p));
   const unread=p.th.filter(t=>!C0().read[t]);
-  const go=()=>{if(pend.length)start(pend,p.mode==="final"?"仕上げ":"今日のレッスン");else{lesson=null;render()}};
+  const go=()=>{if(pend.length){start(pend,p.mode==="final"?"仕上げ":"今日のレッスン");session.lap=p.lap||1}else{lesson=null;render()}};
   // レッスンを読み終えたテーマの残り（昨日の続きなど）を先に解き、そのあと新しいテーマのレッスンへ
   const old=pend.filter(q=>!unread.includes(q.th));
-  if(unread.length&&old.length){start(old,"今日のレッスン");session.then=startCourse;return}
+  if(unread.length&&old.length){start(old,"今日のレッスン");session.lap=p.lap||1;session.then=startCourse;return}
   if(unread.length){lesson={queue:unread,i:0,then:go};render();return}
   go();
 }
@@ -1645,24 +1666,29 @@ function courseHTML(){
   return `<section class="card stack course">
     <div class="label">${p.mode==="final"?`試験まであと${d}日：苦手と法改正だけを回します`:"今日のレッスン"}</div>
     <h2 style="font-size:1.25rem">${esc(title)}</h2>
+    ${p.mode==="final"?"":(()=>{const P=pace(),fd=addDays(Math.max(0,d-finDays(d))),md=x=>{const a=x.split("-");return +a[1]+"月"+(+a[2])+"日"};
+      return `<div class="row" style="gap:6px;flex-wrap:wrap;align-items:center"><span class="muted">ペース</span>${[["1","1周"],["2","2周"],["n","自分で決める"]].map(([k,t])=>`<button class="btn ${P.m===k?"primary":""}" data-pace="${k}" style="min-height:34px;padding:4px 12px">${t}</button>`).join("")}${P.m==="n"?`<label class="muted">1日<input id="paceN" type="number" min="5" max="200" value="${P.n}" style="width:4.5em;margin:0 4px">問</label>`:""}</div>
+      <p class="note" style="margin:0">${P.m==="1"?`仕上げ（${md(fd)}〜）までに1周目を終える量です。`:P.m==="2"?(p.lap===2?`2周目です。仕上げ（${md(fd)}〜）までに2周目を終える量です。`:`仕上げ（${md(fd)}〜）までに2周目まで終える量です（2周目は1周目の1.3倍の速さで進む計算）。1周目が終わると、自動で2周目に入ります。`):"毎日この量で進めます。"}今日は 約${p.quota}問ぶん（応用編1問＝〇×4問ぶん）。</p>`})()}
     ${items.length?`<ol class="steps">
       ${p.mode==="final"?li(fin,`苦手・あやしい問題を ${items.length}問（${bd+od}問済み）`):`
       ${li(!unread.length,`3分レッスンを読む（${p.th.length}テーマ）`)}
       ${b.length?li(bd===b.length,`〇×を ${b.length}問（${bd}問済み）`):""}
-      ${o.length?li(od===o.length,`応用編の穴埋め・計算を ${o.length}問（${od}問済み）`):""}`}
+      ${o.length?li(od===o.length,`応用編の穴埋めを ${o.length}問（${od}問済み）`):""}`}
       ${li(fin,"今日のぶん完了")}
     </ol>`:""}
     ${fin?`<p style="margin:0">🎉 今日のぶんは完了です。${p.mode==="final"?"":"このペースで試験日までに全テーマを一周できます。"}</p><button class="btn block" id="goMore">もう少し進む</button>`
       :`<button class="btn primary block" id="goCourse">${bd+od?"続きから":"始める"}（約${Math.max(min,1)}分）</button>`}
     ${(()=>{const M=masterySets(),n=M.mine.length;return n||M.pre.length?`<button class="btn block" id="goMastery">🎯 習得に専念する（期限が来た問題を30問ずつ）<br><span class="muted">レッスン済み ${n}問${M.pre.length?`・そのあとレッスン前のテーマ ${M.pre.length}問`:""}</span></button>`:""})()}
     <p class="note" style="margin:0">所要時間の目安＝3分レッスン3分×テーマ数＋〇×${perQ().b}秒×問題数＋応用編${Math.round(perQ().o/60)}分×問題数（${perQ().nb>=10?"あなたの最近の実績":"記録がたまるまでの仮の値"}）。</p>
-    <p class="note" style="margin:0">${d>=0?`試験日（${S.exam.replace(/-/g,"/")}）から逆算して、1日の量を自動で決めています。やれなかった日があっても、翌日以降に少しずつ振り分け直します。`:"下の「試験日」を入れると、1日の量を自動で決めます。"}</p>
+    <p class="note" style="margin:0">${pace().m==="n"?"1日の量は、上の「自分で決める」の数で決めています。":d>=0?`試験日（${S.exam.replace(/-/g,"/")}）から逆算して、1日の量を自動で決めています。やれなかった日があっても、翌日以降に少しずつ振り分け直します。`:"下の「試験日」を入れると、1日の量を自動で決めます。"}</p>
   </section>`;
 }
 function courseBind(){
   V.querySelector("#goCourse")?.addEventListener("click",startCourse);
   V.querySelector("#goMore")?.addEventListener("click",()=>{C0().plan=makePlan();save();startCourse()});
   V.querySelector("#goMastery")?.addEventListener("click",startMastery);
+  V.querySelectorAll("[data-pace]").forEach(b=>b.addEventListener("click",()=>{S.pace={...pace(),m:b.dataset.pace};save();render()}));
+  V.querySelector("#paceN")?.addEventListener("change",e=>{const n=Math.max(5,Math.min(200,parseInt(e.target.value)||40));S.pace={...pace(),m:"n",n};save();render()});
 }
 // ペースのひとこと：責めずに、続けられる目安を出す（最近7日の平均と、試験までに1周目を終える目安を比べる）
 function paceHTML(X){
