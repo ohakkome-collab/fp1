@@ -1623,6 +1623,7 @@ function makePlan(){
   }
   return {d:today(),mode:"learn",ids,th,quota,v:5,pm:paceKey(),lap:lap2?2:1};
 }
+function quotaFor(m){const o=S.pace;S.pace={...pace(),m,v:2};let q=0;try{q=makePlan().quota||0}finally{S.pace=o}return q}
 function getPlan(){
   const c=C0(),old=c.plan;
   if(!old||old.d!==today()||old.v!==5||old.pm!==paceKey()){
@@ -1670,8 +1671,8 @@ function courseHTML(){
     <div class="label">${p.mode==="final"?`試験まであと${d}日：苦手と法改正だけを回します`:"今日のレッスン"}</div>
     <h2 style="font-size:1.25rem">${esc(title)}</h2>
     ${p.mode==="final"?"":(()=>{const P=pace(),fd=addDays(Math.max(0,d-finDays(d))),md=x=>{const a=x.split("-");return +a[1]+"月"+(+a[2])+"日"},ex=md(S.exam);
-      return `<div class="row" style="gap:6px;flex-wrap:wrap;align-items:center"><span class="muted">ペース</span>${[["1","1周"],["2","2周"],["n","自分で決める"]].map(([k,t])=>`<button class="btn ${P.m===k?"primary":""}" data-pace="${k}" style="min-height:34px;padding:4px 12px">${t}</button>`).join("")}${P.m==="n"?`<label class="muted">1日<input id="paceN" type="number" min="5" max="200" value="${P.n}" style="width:4.5em;margin:0 4px">問</label>`:""}</div>
-      <p class="note" style="margin:0">${P.m==="1"?`試験日（${ex}）までに1周目を終える量です（仕上げ期間はとりません）。`:P.m==="2"?`${md(fd)}までに1周目を終え、そこから試験日（${ex}）までの3週間で2周目（間違えた・あやしい問題と法改正）を回す量です。`:"毎日この量で進めます。"}</p>`})()}
+      return `<div class="row" style="gap:6px;flex-wrap:wrap;align-items:center"><span class="muted">ペース</span>${[["1","1周"],["2","2周"],["n","自分で決める"]].map(([k,t])=>`<button class="btn ${P.m===k?"primary":""}" data-pace="${k}" style="min-height:34px;padding:4px 12px">${t}${k==="n"?"":`<br><span class="muted" style="color:inherit;opacity:.8">1日 約${quotaFor(k)}問</span>`}</button>`).join("")}${P.m==="n"?`<label class="muted">1日<input id="paceN" type="number" min="5" max="200" value="${P.n}" style="width:4.5em;margin:0 4px">問</label>`:""}</div>
+      <p class="note" style="margin:0">${P.m==="1"?`試験日（${ex}）までに1周目を終える量です（仕上げ期間はとりません）。`:P.m==="2"?`${md(fd)}までに1周目を終え、そこから試験日（${ex}）までの3週間で2周目（間違えた・あやしい問題と法改正）を回す量です。`:"毎日この量で進めます。"}今日の目安は約${p.quota}問（応用編は1問を〇×4問ぶんで数えます）。${(()=>{const W=q=>q.oyo?4:1,dn=items.filter(q=>doneToday(q,p)).reduce((n,q)=>n+W(q),0);return dn>=p.quota?`今日はもう${dn}問ぶん解いたので、目安は達成しています。`:""})()}</p>`})()}
     ${items.length?`<ol class="steps">
       ${p.mode==="final"?li(fin,`苦手・あやしい問題を ${items.length}問（${bd+od}問済み）`):`
       ${li(!unread.length,`3分レッスンを読む（${p.th.length}テーマ）`)}
@@ -1680,7 +1681,7 @@ function courseHTML(){
       ${li(fin,"今日のぶん完了")}
     </ol>`:""}
     <p style="margin:0">今日解いた問題：<b>${((S.log||{})[today()]||0).toLocaleString()}問</b>（レッスン・復習・習得・計算道場をぜんぶ合わせた数。ペースを変えても減りません）</p>
-    ${fin?`<p style="margin:0">🎉 今日のぶんは完了です。${p.mode==="final"?"":"このペースで試験日までに全テーマを一周できます。"}</p><button class="btn block" id="goMore">もう少し進む</button>`
+    ${fin?`<p style="margin:0">🎉 今日のぶんは完了です。${p.mode==="final"?"":pace().m==="1"?"このペースで、試験日までに1周目が終わります。":pace().m==="2"?"このペースで、仕上げ（試験3週間前）までに1周目が終わります。":""}</p><button class="btn block" id="goMore">もう少し進む</button>`
       :`<button class="btn primary block" id="goCourse">${bd+od?"続きから":"始める"}（約${Math.max(min,1)}分）</button>`}
     ${(()=>{const M=masterySets(),n=M.mine.length;return n||M.pre.length?`<button class="btn block" id="goMastery">🎯 習得に専念する（期限が来た問題を30問ずつ）<br><span class="muted">レッスン済み ${n}問${M.pre.length?`・そのあとレッスン前のテーマ ${M.pre.length}問`:""}</span></button>`:""})()}
     <p class="note" style="margin:0">所要時間の目安＝3分レッスン3分×テーマ数＋〇×${perQ().b}秒×問題数＋応用編${Math.round(perQ().o/60)}分×問題数（${perQ().nb>=10?"あなたの最近の実績":"記録がたまるまでの仮の値"}）。</p>
