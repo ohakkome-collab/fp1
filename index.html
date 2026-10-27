@@ -1618,7 +1618,7 @@ function makePlan(){
     th.push(tid);
     for(let k=0;k<L.length;k++){
       ids.push(L[k].id);w+=W(L[k]);
-      if(w>=quota&&L.length-k-1>6)break;   // 残りが少しならこのテーマを今日で終わらせる
+      if(w>=quota&&L.slice(k+1).reduce((n,x)=>n+W(x),0)>6)break;   // 残りが少し（〇×6問ぶん以下）ならこのテーマを今日で終わらせる
     }
   }
   return {d:today(),mode:"learn",ids,th,quota,v:4,pm:paceKey(),lap:lap2?2:1};
@@ -1667,7 +1667,7 @@ function courseHTML(){
     <h2 style="font-size:1.25rem">${esc(title)}</h2>
     ${p.mode==="final"?"":(()=>{const P=pace(),fd=addDays(Math.max(0,d-finDays(d))),md=x=>{const a=x.split("-");return +a[1]+"月"+(+a[2])+"日"},ex=md(S.exam);
       return `<div class="row" style="gap:6px;flex-wrap:wrap;align-items:center"><span class="muted">ペース</span>${[["1","1周"],["2","2周"],["n","自分で決める"]].map(([k,t])=>`<button class="btn ${P.m===k?"primary":""}" data-pace="${k}" style="min-height:34px;padding:4px 12px">${t}</button>`).join("")}${P.m==="n"?`<label class="muted">1日<input id="paceN" type="number" min="5" max="200" value="${P.n}" style="width:4.5em;margin:0 4px">問</label>`:""}</div>
-      <p class="note" style="margin:0">${P.m==="1"?`試験日（${ex}）までに1周目を終える量です（仕上げ期間はとりません）。`:P.m==="2"?`${md(fd)}までに1周目を終え、そこから試験日（${ex}）までの3週間で2周目（間違えた・あやしい問題と法改正）を回す量です。`:"毎日この量で進めます。"}今日は 約${p.quota}問ぶん（応用編1問＝〇×4問ぶん）。</p>`})()}
+      <p class="note" style="margin:0">${P.m==="1"?`試験日（${ex}）までに1周目を終える量です（仕上げ期間はとりません）。`:P.m==="2"?`${md(fd)}までに1周目を終え、そこから試験日（${ex}）までの3週間で2周目（間違えた・あやしい問題と法改正）を回す量です。`:"毎日この量で進めます。"}</p>`})()}
     ${items.length?`<ol class="steps">
       ${p.mode==="final"?li(fin,`苦手・あやしい問題を ${items.length}問（${bd+od}問済み）`):`
       ${li(!unread.length,`3分レッスンを読む（${p.th.length}テーマ）`)}
