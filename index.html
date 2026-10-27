@@ -1602,7 +1602,7 @@ function makePlan(){
   const lap2=false;   // 2周目は仕上げ期間で回す
   const rest2=lap2?order.flatMap(t=>thItems(t).filter(q=>{const c=card(q.id);return c&&!c.l2})):[];
   const weak=finalItems();
-  if((d>=0&&d<=fin&&weak.length>=10)||(!rest.length&&!rest2.length&&weak.length))return {d:today(),mode:"final",ids:weak.slice(0,40).map(q=>q.id),th:[],v:4,pm:paceKey()};
+  if((d>=0&&d<=fin&&weak.length>=10)||(!rest.length&&!rest2.length&&weak.length))return {d:today(),mode:"final",ids:weak.slice(0,40).map(q=>q.id),th:[],v:5,pm:paceKey(),quota:40};
   const days=d>fin?d-fin:Math.max(d,1);
   const all=order.reduce((n,t)=>n+thItems(t).reduce((s,q)=>s+W(q),0),0);
   const tot=(lap2?rest2:rest).reduce((s,q)=>s+W(q),0);
@@ -1621,16 +1621,20 @@ function makePlan(){
       if(w>=quota&&L.slice(k+1).reduce((n,x)=>n+W(x),0)>6)break;   // 残りが少し（〇×6問ぶん以下）ならこのテーマを今日で終わらせる
     }
   }
-  return {d:today(),mode:"learn",ids,th,quota,v:4,pm:paceKey(),lap:lap2?2:1};
+  return {d:today(),mode:"learn",ids,th,quota,v:5,pm:paceKey(),lap:lap2?2:1};
 }
 function getPlan(){
   const c=C0(),old=c.plan;
-  if(!old||old.d!==today()||old.v!==4||old.pm!==paceKey()){
-    const p=makePlan();
+  if(!old||old.d!==today()||old.v!==5||old.pm!==paceKey()){
+    const p=makePlan();p.v=5;
     if(old&&old.d===today()&&p.mode===old.mode){
-      const M=AMAP(),keep=(old.ids||[]).filter(id=>{const k=card(id);return k&&k.t===today()});
-      p.ids=[...new Set(keep.concat(p.ids))];
-      p.th=[...new Set(keep.map(id=>(M.get(id)||{}).th).filter(t=>t&&(old.th||[]).includes(t)).concat(p.th))];
+      // 今日もう解いた分は残し、新しい問題は「1日の量」から解いた分を引いた残りだけ足す（1日の量がふくらまないように）
+      const M=AMAP(),W=q=>q&&q.oyo?4:1,keep=(old.ids||[]).filter(id=>{const k=card(id);return k&&k.t===today()});
+      let w=keep.reduce((n,id)=>n+W(M.get(id)),0);const add=[];
+      for(const id of p.ids){if(keep.includes(id))continue;if(w>=(p.quota||0))break;add.push(id);w+=W(M.get(id))}
+      p.ids=keep.concat(add);
+      const ths=new Set(p.ids.map(id=>(M.get(id)||{}).th).filter(Boolean));
+      p.th=[...new Set((old.th||[]).concat(p.th))].filter(t=>ths.has(t));
     }
     c.plan=p;save();
   }
