@@ -440,6 +440,21 @@ function dueQ(){return ALL().filter(q=>isDue(q.id)&&!isDojoQ(q))}
 // 1日の復習は30問まで。間違えた問題→期限が古い順に出し、残りは翌日以降に回す（先に進む時間を確保するため）
 const REVIEW_CAP=30;
 function dueToday(){const pr=q=>{const c=card(q.id);return (c.lr==="x"?0:1)};return dueQ().sort((a,b)=>pr(a)-pr(b)||(card(a.id).d<card(b.id).d?-1:card(a.id).d>card(b.id).d?1:0)).slice(0,REVIEW_CAP)}
+const lessonDone=q=>!q.th||!!C0().read[q.th];   // テーマの3分レッスンを読んだか（テーマのない問題は読んだ扱い）
+const unmastered=q=>{const c=card(q.id);return !!c&&c.d!==GRAD&&!isDojoQ(q)};   // 解いたことがあって、まだ卒業していない
+function masterySets(){
+  const pr=q=>{const c=card(q.id);return (c.lr==="x"?0:1)},byDue=(a,b)=>pr(a)-pr(b)||(card(a.id).d<card(b.id).d?-1:card(a.id).d>card(b.id).d?1:0);
+  const U=ALL().filter(unmastered);
+  const done=U.filter(lessonDone),due=done.filter(q=>isDue(q.id)).sort(byDue),notYet=done.filter(q=>!isDue(q.id)).sort(byDue);
+  return {mine:due.concat(notYet),due:due.length,pre:U.filter(q=>!lessonDone(q)).sort(byDue)};
+}
+function startMastery(){
+  const M=masterySets();
+  const goPre=()=>{start(M.pre,"習得に専念（レッスン前のテーマ）")};
+  if(M.mine.length){start(M.mine,"習得に専念");if(M.pre.length){session.then=goPre;session.thenLabel=`続き：レッスン前のテーマの、まだ身についていない問題（${M.pre.length}問）`}return}
+  if(M.pre.length)return goPre();
+  lesson=null;render();
+}
 // パスした問題（あとで調べて解く）。答えると一覧から外れる
 function passQ(){const P=S.pass||{};return ALL().filter(q=>P[q.id]).sort((a,b)=>P[a.id]<P[b.id]?-1:P[a.id]>P[b.id]?1:0)}
 function doPass(q){if(q.dojo){session.i++;session.answered=null;renderQuiz();window.scrollTo(0,0);return}S.pass=S.pass||{};S.pass[q.id]=S.pass[q.id]||today();save();session.passed=(session.passed||0)+1;session.i++;session.answered=null;renderQuiz();window.scrollTo(0,0)}
@@ -647,7 +662,7 @@ function renderQuiz(){
       <p class="muted" style="margin:0">${s.ok+s.ng?"正答率 "+Math.round(s.ok/(s.ok+s.ng)*100)+"％。":""}間違えた問題は明日もう一度出題されます。</p>
       ${s.name==="今日のレッスン"||s.name==="仕上げ"?`<p style="margin:0">${(()=>{const p=getPlan();return p.th.filter(t=>thStat(t).st==="done"||thStat(t).st==="mast").map(t=>"「"+shortTh(THM[t].n)+"」").join("")})()||""}${getPlan().th.some(t=>["done","mast"].includes(thStat(t).st))?"を一周しました！":""}</p>`:""}
     </section>
-    ${s.then?`<button class="btn primary block" id="thenGo">続き：新しいテーマの3分レッスンへ</button>`:""}
+    ${s.then?`<button class="btn primary block" id="thenGo">${esc(s.thenLabel||"続き：新しいテーマの3分レッスンへ")}</button>`:""}
     <button class="btn ${s.then?"":"primary "}block" id="back">ホームに戻る</button>`;
     V.querySelector("#back").onclick=()=>{session=null;tab="home";render()};
     V.querySelector("#thenGo")?.addEventListener("click",()=>{vStop();const f=s.then;session=null;f()});
@@ -847,6 +862,7 @@ function rate(q,how,res){
   // 1問にかかった時間（出題〜次へ）を記録。10分を超えたら席を外していたとみなして記録しない
   if(session&&session.t0id===q.id){const sec=Math.round((Date.now()-session.t0)/1000);if(sec>=3&&sec<=600){S.tm=S.tm||{b:[],o:[]};const k=q.oyo?"o":"b";S.tm[k].push(sec);S.tm[k]=S.tm[k].slice(-(q.oyo?20:60))}}
   const first=!S.cards[q.id],c=S.cards[q.id]||{b:0,c:0,w:0};
+  if(first){S.nlog=S.nlog||{};S.nlog[today()]=(S.nlog[today()]||0)+1;if(!S.nlogStart)S.nlogStart=today()}   // ペース用：初めて解いた問題の数
   if(how==="wrong"){c.b=0;c.w++;c.lr="x";c.d=addDays(STEPS[0])}
   else if(how==="unsure"){c.c++;c.lr="o";c.b=1;c.d=addDays(STEPS[1])}
   else if(first||(c.b||0)>=2){c.c++;c.lr="o";c.b=STEPS.length-1;c.d=GRAD}   // 卒業
@@ -1633,7 +1649,7 @@ function courseHTML(){
     </ol>`:""}
     ${fin?`<p style="margin:0">🎉 今日のぶんは完了です。${p.mode==="final"?"":"このペースで試験日までに全テーマを一周できます。"}</p><button class="btn block" id="goMore">もう少し進む</button>`
       :`<button class="btn primary block" id="goCourse">${bd+od?"続きから":"始める"}（約${Math.max(min,1)}分）</button>`}
-    ${due?`<button class="btn block" id="goDue">復習 ${due}問（忘れかけた問題）${dueAll>due?`<br><span class="muted">残り${dueAll-due}問は翌日以降に回します</span>`:""}</button>`:""}
+    ${(()=>{const M=masterySets(),n=M.mine.length;return n||M.pre.length?`<button class="btn block" id="goMastery">🎯 習得に専念する（レッスン済み ${n}問${M.due?`・うち期限 ${M.due}問`:""}）${M.pre.length?`<br><span class="muted">そのあと、レッスン前のテーマ ${M.pre.length}問</span>`:""}</button>`:""})()}
     <p class="note" style="margin:0">所要時間の目安＝3分レッスン3分×テーマ数＋〇×${perQ().b}秒×問題数＋応用編${Math.round(perQ().o/60)}分×問題数（${perQ().nb>=10?"あなたの最近の実績":"記録がたまるまでの仮の値"}）。</p>
     <p class="note" style="margin:0">${d>=0?`試験日（${S.exam.replace(/-/g,"/")}）から逆算して、1日の量を自動で決めています。やれなかった日があっても、翌日以降に少しずつ振り分け直します。`:"下の「試験日」を入れると、1日の量を自動で決めます。"}</p>
   </section>`;
@@ -1641,11 +1657,14 @@ function courseHTML(){
 function courseBind(){
   V.querySelector("#goCourse")?.addEventListener("click",startCourse);
   V.querySelector("#goMore")?.addEventListener("click",()=>{C0().plan=makePlan();save();startCourse()});
+  V.querySelector("#goMastery")?.addEventListener("click",startMastery);
 }
 // ペースのひとこと：責めずに、続けられる目安を出す（最近7日の平均と、試験までに1周目を終える目安を比べる）
 function paceHTML(X){
   const solved=Object.keys(S.cards||{}).length,lrn=X.filter(x=>x.s.st==="lrn").length;
-  let w7=0;for(let i=0;i<7;i++)w7+=(S.log||{})[addDays(-i)]||0;const avg=Math.round(w7/7);
+  // ペースは初めて解いた問題（1周目）だけで数える。記録を始めて7日たつまでは、始めてからの日数で割る
+  let w7=0;for(let i=0;i<7;i++)w7+=(S.nlog||{})[addDays(-i)]||0;
+  const nd=S.nlogStart?Math.min(7,Math.max(1,daysBetween(S.nlogStart,today())+1)):7,avg=Math.round(w7/nd);
   const d=daysLeft(),fin=finDays(d),days=Math.max(1,d>fin?d-fin:d);
   // 1周目：まだ解いていない問題を全部。2周目：全部の問題をもう1回。2周目は1周目の1.3倍の速さで進む前提で、終わる日を出す
   const SP2=1.3,all=THEMES.reduce((n,t)=>n+thItems(t.id).length,0);
@@ -1658,7 +1677,7 @@ function paceHTML(X){
   let msg;
   if(!solved)msg="まずは今日のレッスンから。解くたびにここが進んでいきます。";
   else if(!rest)msg=`1周目の問題は全部解き終わりました！2周目は1周目の1.3倍の速さで進めるので、1日 約${Math.ceil(all/SP2/days)}問のペースで仕上げ（${md(finD)}〜）までに2周目が終わります。`;
-  else if(!w7)msg=`おかえりなさい。今日のレッスンから再開すれば大丈夫です。${plan2}`;
+  else if(!w7)msg=S.nlogStart&&daysBetween(S.nlogStart,today())>=1?`おかえりなさい。今日のレッスンから再開すれば大丈夫です。${plan2}`:`レッスンで新しく解いた問題の数でペースを出します。1日 約${need1}問で1周目が仕上げまでに終わります。${plan2}`;
   else{
     const w=when(avg);
     msg=`最近は1日 約${avg}問。`+(w.d1>ex?"":w.d2>ex?`このペースなら1周目は<b>${md(w.d1)}</b>ごろに終わります。`:`このペースなら1周目は<b>${md(w.d1)}</b>、2周目は<b>${md(w.d2)}</b>ごろに終わります（2周目は1.3倍の速さで進む計算）。`);
