@@ -675,7 +675,7 @@ function renderQuiz(){
     return;
   }
   const q=s.list[s.i],c=card(q.id),done=s.answered;
-  if(s.t0id!==q.id){s.t0id=q.id;s.t0=Date.now()}
+  if(s.t0id!==q.id){s.t0id=q.id;s.t0=clock()}
   if(q.oyo)return renderOyo(q);
   const pct=s.i/s.list.length*100;
   const isO=q.a==="o";
@@ -865,8 +865,10 @@ function answer(q,pick){
 function rate(q,how,res){
   if(q.dojo){S.dojo=S.dojo||{};const d=S.dojo[q.id]||{n:0,ok:0};d.n++;if(how!=="wrong")d.ok++;d.lr=how==="wrong"?"x":"o";d.t=today();S.dojo[q.id]=d;save();session.i++;session.answered=null;renderQuiz();window.scrollTo(0,0);return}
   // 1問にかかった時間（出題〜次へ）を記録。10分を超えたら席を外していたとみなして記録しない
-  if(session&&session.t0id===q.id){const sec=Math.round((Date.now()-session.t0)/1000);if(sec>=3&&sec<=600){S.tm=S.tm||{b:[],o:[]};const k=q.oyo?"o":"b";S.tm[k].push(sec);S.tm[k]=S.tm[k].slice(-(q.oyo?20:60))}}
   const first=!S.cards[q.id],c=S.cards[q.id]||{b:0,c:0,w:0};
+  // 1問にかかった時間（出題〜次へ。解説・家庭教師の時間も含む）。長すぎる分は上限で止めて記録（捨てると短めに出てしまうため）
+  // レッスンの見積もりには「初めて解いた問題」の時間を使う（復習は速いので別に記録）
+  if(session&&session.t0id===q.id){const sec=Math.round((clock()-session.t0)/1000);if(sec>=3){const k=(q.oyo?"o":"b")+(first?"1":"");tmPush(k,Math.min(sec,q.oyo?2400:480),q.oyo?20:60)}}
   if(!first&&session&&session.lap===2)c.l2=today();
   if(first){S.nlog=S.nlog||{};S.nlog[today()]=(S.nlog[today()]||0)+1;if(!S.nlogStart)S.nlogStart=today()}   // ペース用：初めて解いた問題の数
   if(how==="wrong"){c.b=0;c.w++;c.lr="x";c.d=addDays(STEPS[0])}
@@ -1637,6 +1639,15 @@ function makePlan(){
   }
   return {d:today(),mode:"learn",ids,th,quota,v:5,pm:paceKey(),lap:lap2?2:1};
 }
+// 「もう少し進む」：今日もう解いた問題は予定に残したまま、次の1日分を後ろに足す（済みの数が0に戻らないように）
+function morePlan(){
+  const old=getPlan(),p=makePlan(),M=AMAP();
+  const keep=(old.ids||[]).filter(id=>{const k=card(id);return k&&k.t===today()});
+  p.ids=[...new Set(keep.concat(p.ids))];
+  p.th=[...new Set((old.th||[]).concat(p.th))].filter(t=>p.ids.some(id=>(M.get(id)||{}).th===t));
+  p.base=old.base||old.quota;p.more=(old.more||0)+1;
+  return p;
+}
 function quotaFor(m){const o=S.pace;S.pace={...pace(),m,v:2};let q=0;try{q=makePlan().quota||0}finally{S.pace=o}return q}
 function getPlan(){
   const c=C0(),old=c.plan;
@@ -1657,7 +1668,16 @@ function getPlan(){
 }
 function planItems(p){const M=AMAP();return p.ids.map(id=>M.get(id)).filter(q=>q&&!isDojoQ(q))}   // 計算問題は計算道場で解くので、今日の予定には出さない
 // 1問あたりの時間：自分の最近の記録の中央値（記録が少ないうちは目安：〇×90秒・応用編12分）
-function perQ(){const t=S.tm||{},med=a=>{a=a.slice().sort((x,y)=>x-y);return a[Math.floor(a.length/2)]};return {b:(t.b||[]).length>=10?med(t.b):90,o:(t.o||[]).length>=3?med(t.o):720,nb:(t.b||[]).length,no:(t.o||[]).length}}
+let HIDMS=0,hidAt=0;document.addEventListener("visibilitychange",()=>{if(document.hidden)hidAt=Date.now();else if(hidAt){HIDMS+=Date.now()-hidAt;hidAt=0}});
+const clock=()=>Date.now()-HIDMS-(hidAt?Date.now()-hidAt:0);   // 画面を見ていた時間だけ進む時計
+function tmPush(k,sec,keep){S.tm=S.tm||{};S.tm[k]=(S.tm[k]||[]).concat(sec).slice(-keep)}
+// 1問・1レッスンあたりの時間：自分の実績の平均（極端な2割を除く）。初めて解いた問題の記録を優先し、少ないうちは全部の記録、それもなければ仮の値
+function perQ(){
+  const t=S.tm||{},avg=a=>{a=a.slice().sort((x,y)=>x-y);const c=Math.floor(a.length*.1),m=a.slice(c,a.length-c||a.length);return Math.round(m.reduce((s,x)=>s+x,0)/m.length)};
+  const pick=(k1,k0,n,def)=>(t[k1]||[]).length>=n?[avg(t[k1]),"new"]:(t[k0]||[]).length>=n?[avg(t[k0]),"all"]:[def,""];
+  const [b,sb]=pick("b1","b",10,90),[o,so]=pick("o1","o",3,720),[l,sl]=(t.l||[]).length>=3?[avg(t.l),"new"]:[180,""];
+  return {b,o,l,real:!!(sb&&so&&sl),nb:(t.b1||t.b||[]).length};
+}
 const doneToday=(q,p)=>{const c=card(q.id);return !!(c&&c.t===p.d)};
 function startCourse(){
   const p=getPlan(),pend=planItems(p).filter(q=>!doneToday(q,p));
@@ -1676,7 +1696,7 @@ function courseHTML(){
   const bd=b.filter(q=>doneToday(q,p)).length,od=o.filter(q=>doneToday(q,p)).length;
   const unread=p.th.filter(t=>!C0().read[t]);
   const fin=bd+od===items.length;
-  const T=perQ(),min=unread.length*3+Math.ceil((b.length-bd)*T.b/60+(o.length-od)*T.o/60);
+  const T=perQ(),min=Math.ceil((unread.length*T.l+(b.length-bd)*T.b+(o.length-od)*T.o)/60);
   const dueAll=dueQ().filter(q=>!p.ids.includes(q.id)).length,due=Math.min(dueAll,REVIEW_CAP);
   const names=p.th.map(t=>shortTh(THM[t].n));
   const title=p.mode==="final"?"仕上げモード":names.length?names.slice(0,2).join("・")+(names.length>2?` ほか${names.length-2}`:""):"今日のぶんはありません";
@@ -1686,7 +1706,7 @@ function courseHTML(){
     <h2 style="font-size:1.25rem">${esc(title)}</h2>
     ${p.mode==="final"?"":(()=>{const P=pace(),fd=addDays(Math.max(0,d-finDays(d))),md=x=>{const a=x.split("-");return +a[1]+"月"+(+a[2])+"日"},ex=md(S.exam);
       return `<div class="row" style="gap:6px;flex-wrap:wrap;align-items:center"><span class="muted">ペース</span>${[["1","1周"],["2","2周"],["n","自分で決める"]].map(([k,t])=>`<button class="btn ${P.m===k?"primary":""}" data-pace="${k}" style="min-height:34px;padding:4px 12px">${t}${k==="n"?"":`<br><span class="muted" style="color:inherit;opacity:.8">1日 約${quotaFor(k)}問</span>`}</button>`).join("")}${P.m==="n"?`<label class="muted">1日<input id="paceN" type="number" min="5" max="200" value="${P.n}" style="width:4.5em;margin:0 4px">問</label>`:""}</div>
-      <p class="note" style="margin:0">${P.m==="1"?`試験日（${ex}）までに1周目を終える量です（仕上げ期間はとりません）。`:P.m==="2"?(()=>{const L=lap2Split();return L.lap===2?`2周目です。試験日（${ex}）までに2周目を終える量です。`:`1周目を1日 約${L.q1}問で<b>${md(L.end1)}</b>ごろまでに終え、そこから試験日（${ex}）までの${L.d-L.d1}日で2周目を1日 約${L.q2}問（1周目の1.3倍の速さ）で回す量です。1周目が終わると、自動で2周目に入ります。`})():"毎日この量で進めます。"}今日の目安は約${p.quota}問（応用編は1問を〇×4問ぶんで数えます）。${(()=>{const W=q=>q.oyo?4:1,dn=items.filter(q=>doneToday(q,p)).reduce((n,q)=>n+W(q),0);return dn>=p.quota?`今日はもう${dn}問ぶん解いたので、目安は達成しています。`:""})()}</p>`})()}
+      <p class="note" style="margin:0">${P.m==="1"?`試験日（${ex}）までに1周目を終える量です（仕上げ期間はとりません）。`:P.m==="2"?(()=>{const L=lap2Split();return L.lap===2?`2周目です。試験日（${ex}）までに2周目を終える量です。`:`1周目を1日 約${L.q1}問で<b>${md(L.end1)}</b>ごろまでに終え、そこから試験日（${ex}）までの${L.d-L.d1}日で2周目を1日 約${L.q2}問（1周目の1.3倍の速さ）で回す量です。1周目が終わると、自動で2周目に入ります。`})():"毎日この量で進めます。"}今日の目安は約${p.base||p.quota}問（応用編は1問を〇×4問ぶんで数えます）。${(()=>{const W=q=>q.oyo?4:1,dn=items.filter(q=>doneToday(q,p)).reduce((n,q)=>n+W(q),0);return dn>=(p.base||p.quota)?`今日はもう${dn}問ぶん解いたので、目安は達成しています。`:""})()}</p>`})()}
     ${items.length?`<ol class="steps">
       ${p.mode==="final"?li(fin,`苦手・あやしい問題を ${items.length}問（${bd+od}問済み）`):`
       ${li(!unread.length,`3分レッスンを読む（${p.th.length}テーマ）`)}
@@ -1698,13 +1718,13 @@ function courseHTML(){
     ${fin?`<p style="margin:0">🎉 今日のぶんは完了です。${p.mode==="final"?"":pace().m==="1"?"このペースで、試験日までに1周目が終わります。":pace().m==="2"?(p.lap===2?"このペースで、試験日までに2周目が終わります。":"このペースで、試験日までに2周目まで終わります。"):""}</p><button class="btn block" id="goMore">もう少し進む</button>`
       :`<button class="btn primary block" id="goCourse">${bd+od?"続きから":"始める"}（約${Math.max(min,1)}分）</button>`}
     ${(()=>{const M=masterySets(),n=M.mine.length;return n||M.pre.length?`<button class="btn block" id="goMastery">🎯 習得に専念する（期限が来た問題を30問ずつ）<br><span class="muted">レッスン済み ${n}問${M.pre.length?`・そのあとレッスン前のテーマ ${M.pre.length}問`:""}</span></button>`:""})()}
-    <p class="note" style="margin:0">所要時間の目安＝3分レッスン3分×テーマ数＋〇×${perQ().b}秒×問題数＋応用編${Math.round(perQ().o/60)}分×問題数（${perQ().nb>=10?"あなたの最近の実績":"記録がたまるまでの仮の値"}）。</p>
+    ${(()=>{const T=perQ(),f=x=>x<60?x+"秒":x<600&&x%60?Math.floor(x/60)+"分"+(x%60)+"秒":Math.round(x/60)+"分";return `<p class="note" style="margin:0">所要時間の目安＝レッスン${f(T.l)}×テーマ数＋〇×${f(T.b)}×問題数＋応用編${f(T.o)}×問題数。どれも<b>あなたが実際にかかった時間</b>（解説を読む・家庭教師に聞く時間も込み、画面を閉じていた時間は除く）の平均です${T.real?"":"（記録がたまるまでは一部が仮の値）"}。</p>`})()}
     <p class="note" style="margin:0">${pace().m==="n"?"1日の量は、上の「自分で決める」の数で決めています。":d>=0?`試験日（${S.exam.replace(/-/g,"/")}）から逆算して、1日の量を自動で決めています。やれなかった日があっても、翌日以降に少しずつ振り分け直します。`:"下の「試験日」を入れると、1日の量を自動で決めます。"}</p>
   </section>`;
 }
 function courseBind(){
   V.querySelector("#goCourse")?.addEventListener("click",startCourse);
-  V.querySelector("#goMore")?.addEventListener("click",()=>{C0().plan=makePlan();save();startCourse()});
+  V.querySelector("#goMore")?.addEventListener("click",()=>{C0().plan=morePlan();save();startCourse()});
   V.querySelector("#goMastery")?.addEventListener("click",startMastery);
   V.querySelectorAll("[data-pace]").forEach(b=>b.addEventListener("click",()=>{S.pace={...pace(),m:b.dataset.pace,v:2};save();render()}));
   V.querySelector("#paceN")?.addEventListener("change",e=>{const n=Math.max(5,Math.min(200,parseInt(e.target.value)||40));S.pace={...pace(),m:"n",n,v:2};save();render()});
@@ -1765,7 +1785,8 @@ function renderLesson(){
   ${L.then?`<button class="btn primary block" id="lnext">${more?"読んだ → 次のレッスンへ":"読んだ → 問題へ"}</button>`
   :`<button class="btn primary block" id="lgo">読んだ → このテーマを解く（未着手から）</button>
     <div class="grid2"><button class="btn" id="lall">〇×を全部<br><span class="muted">${st.nb}問</span></button><button class="btn" id="loyo" ${st.no?"":"disabled"}>応用編だけ<br><span class="muted">${st.no}問</span></button></div>`}`;
-  const read=()=>{C0().read[tid]=C0().read[tid]||today();save()};
+  if(L.t0id!==tid){L.t0id=tid;L.t0=clock()}
+  const read=()=>{if(!C0().read[tid]&&L.t0id===tid){const sec=Math.round((clock()-L.t0)/1000);if(sec>=10)tmPush("l",Math.min(sec,900),20)}C0().read[tid]=C0().read[tid]||today();save()};
   V.querySelector("#lback").onclick=()=>{vStop();lesson=null;render()};
   V.querySelector("#lsay")?.addEventListener("click",()=>speak(t.n+"。"+t.b.join("。")+"。覚え方。"+t.c));
   V.querySelector("#lnext")?.addEventListener("click",()=>{vStop();read();if(more){L.i++;render()}else{const f=L.then;lesson=null;f()}});
