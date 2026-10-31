@@ -105,6 +105,8 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--sheet);border-t
 :root[data-theme="dark"] .qimg{filter:invert(.88) hue-rotate(180deg)}
 .lawnote{background:var(--warn-soft);color:var(--ink);border-radius:8px;padding:10px 12px;font-size:.88rem;line-height:1.7}
 .lawnote strong{display:block;color:var(--warn)}
+.qpre{margin:0;font-size:1rem;line-height:1.8;padding:6px 10px;border-left:3px solid var(--accent);border-radius:4px;background:color-mix(in srgb,var(--accent) 8%,transparent);white-space:pre-wrap}
+.qpre b{margin-right:6px}
 .qhead2{margin:0;font-size:.85rem;line-height:1.7;color:var(--sub);white-space:pre-wrap}
 .imgbox summary,.sibs summary{cursor:pointer;font-size:.85rem;font-weight:700;color:var(--accent);padding-block:4px}
 .imgbox[open] summary{margin-bottom:6px}
@@ -682,7 +684,9 @@ function renderQuiz(){
   const lawChip=q.past?(changed(q)?'<span class="chip ng">法改正で〇×が変わった</span>':q.law&&q.law.s==="note"?'<span class="chip kaisei">法改正メモ</span>':""):(q.k?'<span class="chip kaisei">法改正</span>':"");
   const img=q.img?(IMG[q.img]?`<details class="imgbox" open><summary>問題の資料（問題用紙の画像）を見る</summary><img class="qimg" src="${IMG[q.img]}" alt="問題の資料"><p class="note" style="margin:6px 0 0">画像の中の「次のうち〜はどれか」は、下の文が正しいかどうかに読み替えてください。</p></details>`:`<p class="note">資料の画像を読み込んでいます…</p>`):"";
   const PS=new Set();   // 合格ポイントの中では同じ用語に1回だけ印をつける
-  const head=q.h&&!(q.img&&IMG[q.img])?`<p class="qhead2">${gl(esc(q.h))}</p>`:"";
+  const KQ=keyPre(q);
+  // 前提が問題の本体なら大きく出す。そうでなければ、大事な条件だけを大きく出し、元の前提は小さく残す
+  const head=q.h&&!(q.img&&IMG[q.img])?(KQ.whole?`<p class="qtext">${gl(esc(q.h))}</p>`:`${KQ.k?`<p class="qpre"><b>前提</b>${gl(esc(KQ.k))}</p>`:""}<p class="qhead2">${gl(esc(q.h))}</p>`):"";
   const sibs=q.past?RAW.filter(x=>x.p===q.p):[];
   const pt=q.pt&&vset().mode==="off"?`<details class="ptwrap"><summary>🎯 合格ポイント（この問題の4つの文 全体のまとめ）を見る</summary><div class="ptbox"><p class="pt1">${gl(esc(q.pt.s),PS)}</p>${q.pt.c?`<p class="ptc"><b>覚え方</b>　${gl(esc(q.pt.c),PS)}</p>`:""}${q.pt.r&&q.pt.r.length?`<div class="label" style="margin-top:6px">あわせて出やすいこと</div><ul class="ptr">${q.pt.r.map(x=>`<li>${gl(esc(x),PS)}</li>`).join("")}</ul>`:""}</div></details>`:"";
   const exp=q.past?`
@@ -1178,7 +1182,7 @@ function voiceAfterRender(q,done){
       ?"同じ問題の続き。"+q.q+ask
       :q.img
       ?"資料つきの問題です。"+(q.vh||q.h||"")+"では、次の文は正しいか。"+q.q+ask
-      :(v.head&&q.h?q.h+"。":"")+q.q+ask;
+      :(()=>{const K=keyPre(q);return (q.h&&(v.head||K.whole)?q.h+"。":K.k?"前提。"+K.k+"では、":"")})()+q.q+ask;   // 「前提を読む」を切っていても、大事な条件は読む
     const qd=s=>session&&!session.answered&&session.list[session.i]===q;
     speak(txt,()=>{
       if(!vOn||session?.answered)return;
@@ -1576,6 +1580,26 @@ const AMAP=()=>new Map(ALL().map(q=>[q.id,q]));
 const C0=()=>{S.course=S.course||{};S.course.read=S.course.read||{};return S.course};
 const shortTh=n=>n.replace(/（[^）]*）/g,"");
 // テーマの問題：基礎編（新しい試験回から）→応用編
+// 前提（小さい文）のうち、答えに関わる条件だけを抜き出す。「記載のない事項は考慮しない」などの決まり文句は除く
+// 前提そのものが問題の本体（「Ａさんが〜した場合の〜」など）のときは whole=true（前提を全部大きく出して読む）
+const KP=new Map();
+function keyPre(q){
+  const raw=q.h||"";if(KP.has(raw))return KP.get(raw);
+  const h=raw.replace(/\s+/g,"");let r={k:"",whole:false};
+  if(h){
+    const m=h.match(/^(.*?)(?:に関する|についての|に係る)次の(?:内容|記述|文章)は(?:適切|不適切)か。(.*)$/);
+    if(!m)r={k:"",whole:true};
+    else{
+      const subj=m[1],rest=m[2].replace(/^なお、/,""),out=[];
+      if(/場合|ときの|年中|[0-9０-９]+年|さん|歳/.test(subj))out.push(subj+"について。");
+      const parts=rest.replace(/ものとし、/g,"ものとする。").replace(/とし、/g,"とする。").split(/(?<=。)/).map(x=>x.replace(/^(また|なお)、/,"").trim()).filter(Boolean);
+      const boiler=/記載のない(事項|特約)|ほかに必要(とされ(てい)?る|な)要件|特約については考慮しない/;
+      for(const x of parts)if(!boiler.test(x))out.push(x.replace(/^各選択肢において、/,""));
+      r={k:out.join(""),whole:false};
+    }
+  }
+  KP.set(raw,r);return r;
+}
 function thItems(tid){
   const b=PQ.filter(q=>q.th===tid&&!isDojoQ(q)).sort((a,b)=>b.y-a.y||b.m-a.m||a.no-b.no||(a.id<b.id?-1:1));
   const o=OY.filter(q=>q.th===tid&&!isDojoQ(q)).sort((a,b)=>b.y-a.y||b.m-a.m||a.no-b.no);
