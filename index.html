@@ -1036,6 +1036,7 @@ function speak(text,cb,onCmd){
   if(!canSpeak){cb&&cb();return}
   {const r=vRec;vRec=null;try{r&&r.abort()}catch(e){}}  // ふつうの聞き取りは止める（自分の声を拾わないように）
   bargeStop();
+  const busy=speechSynthesis.speaking||speechSynthesis.pending;
   speechSynthesis.cancel();
   const said=vClean(text);
   // アプリ自身の声（「正解。」「不正解。」など）を、あなたの合図と聞き間違えないように、読み上げる文の短い言葉を覚えておく
@@ -1046,11 +1047,19 @@ function speak(text,cb,onCmd){
   const parts=[];for(const t of said.match(/[^。]+。?/g)||[said]){if(parts.length&&parts[parts.length-1].length+t.length<=120)parts[parts.length-1]+=t;else parts.push(t)}
   const ja=speechSynthesis.getVoices().find(v=>/^ja/i.test(v.lang));
   let done=false;const fin=()=>{if(done)return;done=true;bargeStop();cb&&cb()};
-  parts.forEach((t,i)=>{
-    const u=new SpeechSynthesisUtterance(t);u.lang="ja-JP";u.rate=vset().rate;if(ja)u.voice=ja;
-    if(i===parts.length-1){u.onend=fin;u.onerror=fin}
-    speechSynthesis.speak(u);
-  });
+  // スマホのChromeは、止めた直後に読ませると無視したり、一時停止のまま固まったりするので、少し待ってから読み、2秒たっても始まらなければ声の指定なしで読み直す
+  let started=false;
+  const play=useVoice=>{try{speechSynthesis.resume()}catch(e){}
+    parts.forEach((t,i)=>{
+      const u=new SpeechSynthesisUtterance(t);u.lang="ja-JP";u.rate=vset().rate;if(ja&&useVoice)u.voice=ja;
+      u.onstart=()=>{started=true};
+      if(i===parts.length-1){u.onend=fin;u.onerror=e=>{if(!started&&useVoice&&e&&e.error!=="interrupted"&&e.error!=="canceled"){speechSynthesis.cancel();play(false)}else fin()}}
+      speechSynthesis.speak(u);
+    });
+  };
+  setTimeout(()=>{if(!done)play(true)},busy?150:0);
+  setTimeout(()=>{if(started||done||speechSynthesis.speaking)return;speechSynthesis.cancel();play(false);
+    setTimeout(()=>{if(started||done)return;vStatus("🔇 読み上げが始まりません。スマホの音量（メディアの音量）を上げて、もう一度読むを押してください");fin()},3000)},2200);
   if(onCmd)bargeStart(w=>{if(done)return true;const go=onCmd(w);if(!go)return false;done=true;bargeStop();speechSynthesis.cancel();setTimeout(go,0);return true},
     t=>{if(done)return true;done=true;bargeStop();speechSynthesis.cancel();setTimeout(()=>vCalcListen(t,cb),0);return true});
 }
