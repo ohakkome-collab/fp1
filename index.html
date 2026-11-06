@@ -437,7 +437,11 @@ const siteUrl=q=>`https://fp1-siken.com/kakomon/${q.y}_${q.m}/${String(q.no).pad
 const card=id=>S.cards[id];
 const isDue=id=>{const c=card(id);return c&&c.d<=today()};
 // 計算問題（応用編の〔計算過程〕の問題と、基礎編の計算・資料の問題）は、毎日の流れにも復習にも入れず「計算道場」で解く
-const isDojoQ=q=>!!(q&&(q.calc||(!q.oyo&&q.img)));
+// 基礎編の計算問題：資料の画像つき／答えを計算で選ぶ問題（ただし2問は計算ではなく組合せの問題）／文の中で計算させる問題
+const CALC_B=new Set("2025_1_26_2 2022_1_26_1 2023_1_27_3 2023_1_28_2 2022_5_27_4 2024_5_43_2 2023_5_41_4 2026_9_26_4 2024_9_25_3 2022_9_26_3 2026_1_32_c 2024_1_23_1 2024_1_23_2 2024_1_23_3 2024_1_23_4 2022_5_43_3".split(" "));
+const NOT_CALC_P=new Set(["2024_1_41","2023_5_36"]);
+const isCalcB=q=>!q.oyo&&(!!q.img||CALC_B.has(q.id)||(/^答え：/.test(q.q||"")&&!NOT_CALC_P.has(q.p)));
+const isDojoQ=q=>!!(q&&(q.calc||isCalcB(q)));
 function dueQ(){return ALL().filter(q=>isDue(q.id)&&!isDojoQ(q))}
 // 1日の復習は30問まで。間違えた問題→期限が古い順に出し、残りは翌日以降に回す（先に進む時間を確保するため）
 const REVIEW_CAP=30;
@@ -446,7 +450,7 @@ const lessonDone=q=>!q.th||!!C0().read[q.th];   // テーマの3分レッスン�
 const unmastered=q=>{const c=card(q.id);return !!c&&c.d!==GRAD&&!isDojoQ(q)};   // 解いたことがあって、まだ卒業していない
 function masterySets(){
   const pr=q=>{const c=card(q.id);return (c.lr==="x"?0:1)},byDue=(a,b)=>pr(a)-pr(b)||(card(a.id).d<card(b.id).d?-1:card(a.id).d>card(b.id).d?1:0);
-  const U=ALL().filter(q=>unmastered(q)&&isDue(q.id));   // 期限が来た問題だけ（期限前は、間をあけた方が覚えるので出さない）
+  const U=ALL().filter(q=>unmastered(q)&&isDue(q.id)&&!passedNow(q));   // 期限が来た問題だけ（期限前は、間をあけた方が覚えるので出さない）
   return {mine:U.filter(lessonDone).sort(byDue),pre:U.filter(q=>!lessonDone(q)).sort(byDue)};
 }
 // 30問ずつ区切って出す（区切りごとに「続き：次の30問」）。区切るたびに数え直すので、解いた問題は次の区切りに出ない
@@ -463,8 +467,9 @@ function startMastery(){
   }
 }
 // パスした問題（あとで調べて解く）。答えると一覧から外れる
+const passedNow=q=>!!(S.pass&&S.pass[q.id]===today());   // 今日パスした問題は、今日はもう出さない（予定の中で足止めしない）
 function passQ(){const P=S.pass||{};return ALL().filter(q=>P[q.id]).sort((a,b)=>P[a.id]<P[b.id]?-1:P[a.id]>P[b.id]?1:0)}
-function doPass(q){if(q.dojo){session.i++;session.answered=null;renderQuiz();window.scrollTo(0,0);return}S.pass=S.pass||{};S.pass[q.id]=S.pass[q.id]||today();save();session.passed=(session.passed||0)+1;session.i++;session.answered=null;renderQuiz();window.scrollTo(0,0)}
+function doPass(q){if(q.dojo){session.i++;session.answered=null;renderQuiz();window.scrollTo(0,0);return}S.pass=S.pass||{};S.pass[q.id]=today();save();session.passed=(session.passed||0)+1;session.i++;session.answered=null;renderQuiz();window.scrollTo(0,0)}
 function statFor(list){
   let m=0,l=0,w=0;
   list.forEach(q=>{const c=card(q.id);if(!c)return;if(c.lr==="x")w++;else if(c.b>=3)m++;else l++});
@@ -481,12 +486,13 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
 function dojoQ(q){
   if(!q.oyo)return {...q,dojo:true};
   const n=q.nw||{};
-  if(!n.t)return {...q,dojo:true,same:n.same||""};
+  if(!n.t)return {...q,dojo:true,same:n.same||"",old:n.old||""};
   return {...q,dojo:true,t:n.t,ans:n.ans,st:n.st,e:n.st.join("\n"),at:"（今の数字で解き直した計算）\n"+n.st.join("\n"),lw:"",lb:{},nwNote:n.note||"",ct:n.ct||""};
 }
 function dojoBanner(q){
   if(!q.dojo)return "";
   if(q.nwNote)return `<div class="lawnote"><strong>🆕 今の数字（2026年10月1日時点）に直した問題です</strong>${esc(q.nwNote)}答えも今の数字で計算した答えです。問題用紙の画像だけは当時の数字のままです。<br><span class="muted">計算道場の採点は記録だけで、復習の予定には入りません。</span></div>`;
+  if(q.old)return `<div class="lawnote"><strong>⚠ 当時の制度の問題です（答えも当時のものです）</strong>${esc(q.old)}</div>`;
   if(q.same)return `<div class="ostep"><div class="label">✅ 今の法律でも答えは同じです</div><p style="margin:0">${esc(q.same)}</p><p class="muted" style="margin:4px 0 0">計算道場の採点は記録だけで、復習の予定には入りません。</p></div>`;
   return "";
 }
@@ -501,7 +507,7 @@ function setsHTML(q,cs,imgs,open,need){
   return pre+`<details class="imgbox" ${open&&!S.length?"open":""}><summary>【第${q.g}問】設例の全文${S.length?"を見る":"（前提：年齢・家族・加入歴など）"}</summary>${t?`<p class="qtext sets">${esc(t)}</p>`:""}<details class="imgbox"><summary>設例の問題用紙の画像を見る${q.nwNote?"（当時の数字のまま）":""}</summary>${imgs(cs.pg)}</details></details>`;
 }
 function dojoItems(){
-  const o=OY.filter(q=>q.calc),b=PQ.filter(q=>!q.oyo&&q.img);
+  const o=OY.filter(q=>q.calc),b=PQ.filter(isCalcB);
   return THEMES.map(t=>({t,o:o.filter(q=>q.th===t.id).sort((a,b)=>b.y-a.y||b.m-a.m||a.no-b.no),b:b.filter(q=>q.th===t.id)})).filter(x=>x.o.length||x.b.length);
 }
 const dojoRec=id=>(S.dojo||{})[id];
@@ -520,7 +526,7 @@ function renderDojo(){
     <div class="list">${G.filter(x=>x.o.length).map(x=>`<button class="btn block" data-dj="o:${x.t.id}" style="text-align:left">${esc(shortTh(x.t.n))}<br><span class="muted">${x.o.length}問・解いた ${done(x.o)}・今の数字に直した ${x.o.filter(q=>q.nw&&q.nw.t).length}</span></button>`).join("")}</div>
   </section>
   <section class="card stack"><h2>基礎編の計算・資料（〇×）<span class="muted" style="font-size:.85rem"> 解いた ${done(allB)}/${allB.length}</span></h2>
-    <p class="note" style="margin:0">基礎編は問題用紙の画像の数字で計算する問題です。答えは画像の数字に合わせてあります（法改正があるものは「今の法律では」を出します）。</p>
+    <p class="note" style="margin:0">基礎編の計算問題です。画像がある問題の答えは、画像の数字に合わせてあります（法改正があるものは「今の法律では」を出します）。</p>
     <div class="list">${G.filter(x=>x.b.length).map(x=>`<button class="btn block" data-dj="b:${x.t.id}" style="text-align:left">${esc(shortTh(x.t.n))}<br><span class="muted">${x.b.length}問・解いた ${done(x.b)}</span></button>`).join("")}</div>
   </section>`;
   V.querySelector("#dback").onclick=()=>{lesson=null;render()};
@@ -1660,7 +1666,7 @@ function makePlan(){
   const ids=[],th=[];let w=0;
   // 前の日までにパスした問題は、翌日の予定のいちばん最初に戻す（忘れられないように）
   const P=S.pass||{};
-  for(const q of passQ())if(P[q.id]<today()&&!card(q.id)&&!isDojoQ(q)){ids.push(q.id);w+=W(q)}
+  for(const q of passQ())if(P[q.id]<today()&&!card(q.id)&&!isDojoQ(q))ids.push(q.id);   // 1日の量には数えない（パスを繰り返しても先へ進めるように）
   for(const tid of order){
     const L=lap2?thItems(tid).filter(q=>{const c=card(q.id);return c&&!c.l2}):thItems(tid).filter(q=>!card(q.id)&&!(S.pass&&S.pass[q.id]));if(!L.length)continue;
     if(w>=quota)break;
@@ -1713,7 +1719,7 @@ function perQ(){
 }
 const doneToday=(q,p)=>{const c=card(q.id);return !!(c&&c.t===p.d)};
 function startCourse(){
-  const p=getPlan(),pend=planItems(p).filter(q=>!doneToday(q,p));
+  const p=getPlan(),pend=planItems(p).filter(q=>!doneToday(q,p)&&!passedNow(q));
   const unread=p.th.filter(t=>!C0().read[t]);
   const go=()=>{if(pend.length){start(pend,p.mode==="final"?"仕上げ":"今日のレッスン");session.lap=p.lap||1}else{lesson=null;render()}};
   // レッスンを読み終えたテーマの残り（昨日の続きなど）を先に解き、そのあと新しいテーマのレッスンへ
@@ -1728,8 +1734,9 @@ function courseHTML(){
   const b=items.filter(q=>!q.oyo),o=items.filter(q=>q.oyo);
   const bd=b.filter(q=>doneToday(q,p)).length,od=o.filter(q=>doneToday(q,p)).length;
   const unread=p.th.filter(t=>!C0().read[t]);
-  const fin=bd+od===items.length;
-  const T=perQ(),min=Math.ceil((unread.length*T.l+(b.length-bd)*T.b+(o.length-od)*T.o)/60);
+  const skip=q=>passedNow(q)&&!doneToday(q,p),bp=b.filter(skip).length,op=o.filter(skip).length;   // 今日パスした問題は、解かなくても先へ進める
+  const fin=bd+od+bp+op===items.length;
+  const T=perQ(),min=Math.ceil((unread.length*T.l+(b.length-bd-bp)*T.b+(o.length-od-op)*T.o)/60);
   const dueAll=dueQ().filter(q=>!p.ids.includes(q.id)).length,due=Math.min(dueAll,REVIEW_CAP);
   const names=p.th.map(t=>shortTh(THM[t].n));
   const title=p.mode==="final"?"仕上げモード":names.length?names.slice(0,2).join("・")+(names.length>2?` ほか${names.length-2}`:""):"今日のぶんはありません";
@@ -1743,8 +1750,8 @@ function courseHTML(){
     ${items.length?`<ol class="steps">
       ${p.mode==="final"?li(fin,`苦手・あやしい問題を ${items.length}問（${bd+od}問済み）`):`
       ${li(!unread.length,`3分レッスンを読む（${p.th.length}テーマ）`)}
-      ${b.length?li(bd===b.length,`〇×を ${b.length}問（${bd}問済み）`):""}
-      ${o.length?li(od===o.length,`応用編の穴埋めを ${o.length}問（${od}問済み）`):""}`}
+      ${b.length?li(bd+bp===b.length,`〇×を ${b.length}問（${bd}問済み${bp?`・パス${bp}問`:""}）`):""}
+      ${o.length?li(od+op===o.length,`応用編の穴埋めを ${o.length}問（${od}問済み${op?`・パス${op}問`:""}）`):""}`}
       ${li(fin,"今日のぶん完了")}
     </ol>`:""}
     <p style="margin:0">今日解いた問題：<b>${((S.log||{})[today()]||0).toLocaleString()}問</b>（レッスン・復習・習得・計算道場をぜんぶ合わせた数。ペースを変えても減りません）</p>
