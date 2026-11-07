@@ -381,7 +381,7 @@ const catOf=no=>no<=8?"L":no<=15?"R":no<=24?"K":no<=33?"T":no<=41?"F":"S";
 const EXAMS=[[2026,9],[2026,5],[2026,1],[2025,9],[2025,5],[2025,1],[2024,9],[2024,5],[2024,1],[2023,9],[2023,5],[2023,1],[2022,9],[2022,5],[2022,1]];
 // オリジナルの4択問題も〇×に分ける
 Q.splice(0,Q.length,...Q.flatMap(q=>q.type!=="mc"?[q]:q.ch.map((t,i)=>({id:q.id+"_"+(i+1),c:q.c,k:q.k,h:q.q+"（次の答えは正しいか）",q:"答え："+t,a:i===q.a?"o":"x",e:q.e}))));
-let PQ=[],RAW=[],pqState="loading",IMG={};
+let PQ=[],PQF=[],DUP={},RAW=[],pqState="loading",IMG={};
 /* 「答え：〇〇円」のように4つの答えから選ぶ問題（計算など）は、同じ計算を4回させないよう1問にまとめる。
    出題のたびに4つの答えのうち1つを〇×で出す（半分の確率で正しい答え）。記録は問題単位（id＝親番号_c）。 */
 function pickVar(G){
@@ -406,19 +406,46 @@ function groupCalc(list){
 // 以前に1文ずつ解いた記録を、まとめた問題に引き継ぐ
 function migrateGroups(){
   if(!S||!S.cards)return;
-  for(const G of PQ){
+  for(const G of PQF){
     if(!G.grp)continue;
     if(!S.cards[G.id]){const cs=G.grp.map(v=>S.cards[v.id]).filter(Boolean).sort((a,b)=>(b.t||"")<(a.t||"")?-1:1);if(cs.length)S.cards[G.id]={...cs[0]}}
     if(S.pass&&G.grp.some(v=>S.pass[v.id])&&!S.pass[G.id]){S.pass[G.id]=G.grp.map(v=>S.pass[v.id]).filter(Boolean).sort()[0]}
     if(S.pass)G.grp.forEach(v=>delete S.pass[v.id]);
   }
 }
+/* 問題文と答えが同じ問題は1問にまとめる（新しい回の問題を残す。空白や読点だけの違いは同じとみなす）。
+   図を見て答える問題は、図が違えば別の問題なのでまとめない。DUP＝まとめられた問題のid→残した問題 */
+const sameKey=x=>(x||"").normalize("NFKC").replace(/[\s、。，．・「」『』（）()]/g,"");
+function dedupe(list){
+  const by=new Map(),out=[];DUP={};
+  for(const q of list){
+    const key=q.grp?"g"+q.grp.map(v=>sameKey(v.s)+v.a).sort().join("|")+sameKey(q.vh):q.img?"":sameKey(q.s)+"|"+q.a;
+    const k=key&&by.get(key);
+    if(!k){if(key)by.set(key,q);out.push(q);continue}
+    DUP[q.id]=k;
+    if((q.e||"").length>(k.e||"").length&&!k.grp)k.e=q.e;   // 解説は詳しいほうを使う
+  }
+  return out;
+}
+// まとめられた問題の記録を、残した問題に引き継ぐ（新しいほうの記録を残す）
+function migrateDups(){
+  if(!S)return;
+  for(const [a,k] of Object.entries(DUP)){
+    const ca=S.cards&&S.cards[a],ck=S.cards&&S.cards[k.id];
+    if(ca){if(!ck||(ca.t||"")>(ck.t||""))S.cards[k.id]=ca;delete S.cards[a]}
+    for(const f of ["pass","my","stuck","dojo"])if(S[f]&&S[f][a]!==undefined){if(S[f][k.id]===undefined)S[f][k.id]=S[f][a];delete S[f][a]}
+  }
+  const P=S.course&&S.course.plan;
+  if(P&&P.ids)P.ids=[...new Set(P.ids.map(id=>DUP[id]?DUP[id].id:id))];
+}
+// 「試験回ごとに解く」は、その回の問題を全部出す（まとめた問題は残した問題として出すので、記録は1つ）
+const examQ=f=>[...new Set(PQF.filter(f).map(q=>DUP[q.id]||q))];
 async function loadImgs(){for(const f of ["imgs1.json","imgs2.json","imgs3.json","imgs4.json","imgs5.json","imgs6.json"]){try{const r=await fetch(f);if(r.ok)Object.assign(IMG,await r.json())}catch(e){}}if(session)renderQuiz()}
 async function loadPast(){
   try{
     RAW=[];
     for(const f of ["pasttf1.json","pasttf2.json"]){const r=await fetch(f);if(!r.ok)throw 0;const j=await r.json();RAW.push(...j.items.map(o=>({...o,h:j.h[o.p],pt:(j.pt||{})[o.p],th:(j.tm||{})[o.p],q:o.s,c:catOf(o.no),past:true})))}
-    PQ=groupCalc(RAW);migrateGroups();
+    PQF=groupCalc(RAW);PQ=dedupe(PQF);migrateGroups();migrateDups();
     pqState="ok";
   }catch(e){pqState="error"}
   if(!session&&!lesson)render();
@@ -905,14 +932,14 @@ function rate(q,how,res){
 /* ===== 試験回ごとの記録 ===== */
 function renderKako(){
   if(pqState!=="ok"){V.innerHTML=`<section class="card empty">${pqState==="loading"?"過去問を読み込んでいます…":"過去問を読み込めませんでした。ページを開き直してください。"}</section>`;return}
-  const cell=(y,m,no)=>{const st=statFor(PQ.filter(q=>q.y===y&&q.m===m&&q.no===no));const cls=st.untouched===st.n?"":st.w?"w":st.m===st.n?"m":"l";return `<button class="cell ${cls}" data-cell="${y}-${m}-${no}" aria-label="${y}年${m}月 問${no}">${no}</button>`};
+  const cell=(y,m,no)=>{const st=statFor(examQ(q=>q.y===y&&q.m===m&&q.no===no));const cls=st.untouched===st.n?"":st.w?"w":st.m===st.n?"m":"l";return `<button class="cell ${cls}" data-cell="${y}-${m}-${no}" aria-label="${y}年${m}月 問${no}">${no}</button>`};
   V.innerHTML=`
   <section class="card stack">
     <h2>試験回ごとに解く</h2>
     <p class="note" style="margin:0">基礎編は1問（4つの文）ずつ〇×で、応用編は記述式のまま解きます。番号をタップすると、その問題の文だけを解けます。マスの色は、その問題の文の出来ぐあいです。</p>
     <div class="legend"><span style="--c:var(--ok)">全部定着</span><span style="--c:var(--accent)">学習中</span><span style="--c:var(--ng)">間違えた文あり</span><span style="--c:var(--line)">未着手</span></div>
   </section>
-  ${EXAMS.map(([y,m])=>{const qs=PQ.filter(q=>q.y===y&&q.m===m),st=statFor(qs),done=qs.length-st.untouched,law=qs.filter(changed).length;return `
+  ${EXAMS.map(([y,m])=>{const qs=examQ(q=>q.y===y&&q.m===m),st=statFor(qs),done=qs.length-st.untouched,law=qs.filter(changed).length;return `
   <section class="card stack exam">
     <div class="row" style="justify-content:space-between"><strong>${y}年${m}月</strong><span class="muted">解いた ${done}/${qs.length}文${law?`・〇×が変わった ${law}`:""}</span></div>
     <div class="cells">${Array.from({length:50},(_,i)=>cell(y,m,i+1)).join("")}</div>
@@ -920,11 +947,11 @@ function renderKako(){
     ${(()=>{const o=OY.filter(q=>q.y===y&&q.m===m);if(!o.length)return"";const d=o.filter(q=>card(q.id)).length;return `<button class="btn" data-oyoex="${y}-${m}">応用編（問51〜65）を解く <span class="muted">解いた ${d}/${o.length}</span></button>`})()}
   </section>`}).join("")}
   <p class="note">試験問題の出典：一般社団法人 金融財政事情研究会「ファイナンシャル・プランニング技能検定 1級学科試験（基礎編）」。同会の「技能検定試験問題の使用について」に従い、4つの選択肢を1つずつの〇×問題に作り替えて掲載しています。</p>`;
-  const get=v=>{const [y,m]=v.split("-").map(Number);return PQ.filter(q=>q.y===y&&q.m===m)};
+  const get=v=>{const [y,m]=v.split("-").map(Number);return examQ(q=>q.y===y&&q.m===m)};
   V.querySelectorAll("[data-exam]").forEach(b=>b.onclick=()=>start(get(b.dataset.exam),b.dataset.exam.replace("-","年")+"月"));
   V.querySelectorAll("[data-examrest]").forEach(b=>b.onclick=()=>{const l=get(b.dataset.examrest).filter(q=>!card(q.id));if(l.length)start(l,b.dataset.examrest.replace("-","年")+"月 未着手")});
   V.querySelectorAll("[data-oyoex]").forEach(b=>b.onclick=()=>{const [y,m]=b.dataset.oyoex.split("-").map(Number);start(OY.filter(q=>q.y===y&&q.m===m),`${y}年${m}月 応用編`)});
-  V.querySelectorAll("[data-cell]").forEach(b=>b.onclick=()=>{const [y,m,no]=b.dataset.cell.split("-").map(Number);start(PQ.filter(q=>q.y===y&&q.m===m&&q.no===no),`${y}年${m}月 問${no}`)});
+  V.querySelectorAll("[data-cell]").forEach(b=>b.onclick=()=>{const [y,m,no]=b.dataset.cell.split("-").map(Number);start(examQ(q=>q.y===y&&q.m===m&&q.no===no),`${y}年${m}月 問${no}`)});
 }
 
 /* ===== 音声（読み上げ・声で回答） =====
